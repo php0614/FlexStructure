@@ -573,12 +573,12 @@
       <div class="days-row" id="f-days"></div>
     </div>
     <div class="fld" id="fld-range">
-      <label>Range — repeat only between these dates (optional, e.g. 6.12-7.8)</label>
-      <input type="text" id="f-range" placeholder="6.12-7.8">
+      <label>Range — repeat only between these dates</label>
+      <input type="text" id="f-range">
     </div>
     <div class="fld" id="fld-excl">
-      <label>Excluded days — skip these dates (optional, e.g. 7.19, 7.26)</label>
-      <input type="text" id="f-excl" placeholder="7.19, 7.26">
+      <label>Excluded days — skip these dates</label>
+      <input type="text" id="f-excl">
     </div>
     <label>Color</label>
     <div class="color-row" id="f-colors"></div>
@@ -1644,6 +1644,16 @@ function buildColors(sel){
     };
   });
 }
+// default Range for a new schedule: today → 4 weeks (28 days) later, as "M.D-M.D"
+function defaultScheduleRange(){
+  const a = parseDate(todayStr()), b = addDays(a, 28);
+  return (a.getMonth()+1)+'.'+a.getDate()+'-'+(b.getMonth()+1)+'.'+b.getDate();
+}
+// greyed example for Excluded days: a single date 7 days from now, as "M.D"
+function exclExampleDate(){
+  const d = addDays(parseDate(todayStr()), 7);
+  return (d.getMonth()+1)+'.'+d.getDate();
+}
 function openEditor(id){
   editingId = id || null;
   const s = id ? state.schedules.find(x => x.id === id) : null;
@@ -1652,8 +1662,12 @@ function openEditor(id){
   $('#f-time').value = s ? s.time : '12:30';
   $('#f-dur').value  = s ? s.dur  : 60;
   $('#f-flex').value = s ? s.flex : state.settings.defaultFlex;
-  $('#f-range').value = (s && s.range) || '';
-  $('#f-excl').value  = (s && s.excl)  || '';
+  // Range: a NEW schedule is pre-filled (actually filled) with today → 4 weeks later;
+  // editing keeps the saved value. Excluded days: never filled — show a greyed example (7 days out).
+  $('#f-range').value = s ? (s.range || '') : defaultScheduleRange();
+  $('#f-range').placeholder = defaultScheduleRange();
+  $('#f-excl').value  = (s && s.excl) || '';
+  $('#f-excl').placeholder = exclExampleDate();
   buildDayChecks(s ? s.days : [0,1,2,3,4,5,6]);
   buildColors(s ? s.color : PALETTE[state.schedules.length % PALETTE.length]);
   $('#f-delete').style.display = s ? '' : 'none';
