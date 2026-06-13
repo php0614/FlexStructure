@@ -81,13 +81,17 @@
     border: 1px solid #a7f3d0;
     margin: 12px 16px 0;
     border-radius: 12px;
-    padding: 14px 18px;
-    text-align: center;
+    padding: 8px 16px;
     animation: pulse 2s ease-in-out infinite;
   }
   #banner.show { display: block; }
-  #banner .msg { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+  #banner .banner-row {
+    display: flex; align-items: center; gap: 12px; padding: 6px 0;
+  }
+  #banner .banner-row + .banner-row { border-top: 1px solid #bbf7d0; }
+  #banner .msg { font-size: 15px; font-weight: 600; flex: 1; text-align: left; }
   #banner .msg .delta { color: var(--green); }
+  #banner .banner-row button { flex: none; }
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.25); }
     50%      { box-shadow: 0 0 0 8px rgba(22,163,74,0); }
@@ -112,10 +116,18 @@
       align-items: start;
     }
     #timerPanel   { grid-area: timer; }
-    #dayPanel     { grid-area: day; }
+    #daysWrap     { grid-area: day; }
     #weeksPanel   { grid-area: weeks; }
     #suppPanel    { grid-area: supp; }
     #fitnessPanel { grid-area: fit; }
+  }
+
+  /* the two Day panels (Intelligence / Body): side by side when wide enough, else stacked */
+  #daysWrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    align-items: start;
   }
 
   section.panel {
@@ -161,9 +173,9 @@
   .day-cell .dot { width: 5px; height: 5px; border-radius: 50%; }
 
   /* ---------- Day / pie ---------- */
-  #dayTitle { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-  #pieWrap { display: flex; justify-content: center; }
-  #pieWrap svg { max-width: 360px; width: 100%; height: auto; }
+  .day-sub { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .pie-wrap { display: flex; justify-content: center; }
+  .pie-wrap svg { max-width: 360px; width: 100%; height: auto; }
 
   table.sched {
     width: 100%;
@@ -220,6 +232,7 @@
     padding: 16px;
   }
   .modal-bg.show { display: flex; }
+  #repeatModal { z-index: 110; }   /* stack above the +Health editor */
   .modal {
     background: #fff;
     border-radius: 14px;
@@ -249,6 +262,8 @@
   }
   .days-row label.day-chk input { display: none; }
   .days-row label.day-chk.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+  /* a recurrence field greyed out because a "Today only" / "This weekday only" toggle is on */
+  .fld.disabled { opacity: 0.4; pointer-events: none; }
   .color-row { display: flex; gap: 6px; margin-top: 4px; }
   .color-row .c {
     width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 2px solid transparent;
@@ -356,6 +371,12 @@
     color: #6366f1; cursor: pointer; user-select: none; font-family: "Noto Sans KR", sans-serif;
   }
   .passed-chip input { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #6366f1; }
+  .rep-opts-btn {
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
+    border: 1px solid var(--line); background: #f8f8ff; color: #6366f1; cursor: pointer;
+    font-family: "Noto Sans KR", sans-serif; line-height: 1.3;
+  }
+  .rep-opts-btn:hover { border-color: #6366f1; background: #eef2ff; }
 
   /* ---------- Icon grid (add modal) ---------- */
   .icon-grid {
@@ -461,10 +482,7 @@
   <button id="btnReload">Reload</button>
 </header>
 
-<div id="banner">
-  <div class="msg" id="bannerMsg"></div>
-  <button class="start" id="bannerStart">Start</button>
-</div>
+<div id="banner"></div>
 
 <main>
   <!-- ---------- Timer ---------- -->
@@ -476,19 +494,34 @@
     <button id="btnFinish" style="display:none">Finish now</button>
   </section>
 
-  <!-- ---------- Day ---------- -->
-  <section class="panel" id="dayPanel">
-    <h2>Day</h2>
-    <div id="dayTitle"></div>
-    <div id="pieWrap"></div>
-    <table class="sched">
-      <thead>
-        <tr><th>Time</th><th>Schedule</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
-      </thead>
-      <tbody id="schedBody"></tbody>
-    </table>
-    <div class="empty-note" id="emptyNote" style="display:none">No schedules for this day. Click “+” to add one.</div>
-  </section>
+  <!-- ---------- Day (Intelligence = schedules, Body = health) ---------- -->
+  <div id="daysWrap">
+    <section class="panel" id="dayPanelIntel">
+      <h2>Day &mdash; Intelligence</h2>
+      <div id="dayTitleIntel" class="day-sub"></div>
+      <div id="pieWrapIntel" class="pie-wrap"></div>
+      <table class="sched">
+        <thead>
+          <tr><th>Time</th><th>Schedule</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
+        </thead>
+        <tbody id="schedBodyIntel"></tbody>
+      </table>
+      <div class="empty-note" id="emptyNoteIntel" style="display:none">No schedules for this day. Click “+Schedule” to add one.</div>
+    </section>
+
+    <section class="panel" id="dayPanelBody">
+      <h2>Day &mdash; Body</h2>
+      <div id="dayTitleBody" class="day-sub"></div>
+      <div id="pieWrapBody" class="pie-wrap"></div>
+      <table class="sched">
+        <thead>
+          <tr><th>Time</th><th>Item</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
+        </thead>
+        <tbody id="schedBodyBody"></tbody>
+      </table>
+      <div class="empty-note" id="emptyNoteBody" style="display:none">No health items for this day. Click “+Health” to add some.</div>
+    </section>
+  </div>
 
   <!-- ---------- Weeks ---------- -->
   <section class="panel" id="weeksPanel">
@@ -521,18 +554,32 @@
     <h3 id="editTitle">New Schedule</h3>
     <label>Name</label>
     <input type="text" id="f-name" placeholder="e.g. Lunch, Practice, Workout">
+    <div class="switch-row" style="margin-top:14px">
+      <span class="lbl">Today only — add to today’s date only (ignores all repeat settings)</span>
+      <label class="switch"><input type="checkbox" id="f-today"><span class="knob"></span></label>
+    </div>
+    <div class="switch-row">
+      <span class="lbl">This weekday only — repeat every 7 days from today</span>
+      <label class="switch"><input type="checkbox" id="f-weekday"><span class="knob"></span></label>
+    </div>
     <label>Scheduled time</label>
     <input type="time" id="f-time" value="12:30">
     <label>Duration (minutes)</label>
     <input type="number" id="f-dur" min="5" max="720" step="5" value="60">
     <label>Flex Window — can start &plusmn; this many minutes around the scheduled time</label>
     <input type="number" id="f-flex" min="0" max="120" step="5" value="15">
-    <label>Days</label>
-    <div class="days-row" id="f-days"></div>
-    <label>Range — repeat only between these dates (optional, e.g. 6.12-7.8)</label>
-    <input type="text" id="f-range" placeholder="6.12-7.8">
-    <label>Excluded days — skip these dates (optional, e.g. 7.19, 7.26)</label>
-    <input type="text" id="f-excl" placeholder="7.19, 7.26">
+    <div class="fld" id="fld-days">
+      <label>Days</label>
+      <div class="days-row" id="f-days"></div>
+    </div>
+    <div class="fld" id="fld-range">
+      <label>Range — repeat only between these dates</label>
+      <input type="text" id="f-range">
+    </div>
+    <div class="fld" id="fld-excl">
+      <label>Excluded days — skip these dates</label>
+      <input type="text" id="f-excl">
+    </div>
     <label>Color</label>
     <div class="color-row" id="f-colors"></div>
     <div class="switch-row">
@@ -640,6 +687,27 @@
   </div>
 </div>
 
+<!-- ---------- Repeat options (health items) ---------- -->
+<div class="modal-bg" id="repeatModal">
+  <div class="modal">
+    <h3 class="ko">반복 설정 (Repeat)</h3>
+    <div class="switch-row" style="margin-top:4px">
+      <span class="lbl ko">매주 반복 — 같은 요일에 반복</span>
+      <label class="switch"><input type="checkbox" id="rp-on"><span class="knob"></span></label>
+    </div>
+    <label class="ko">요일 (Weekday)</label>
+    <div class="days-row" id="rp-days"></div>
+    <label class="ko">기간 — 이 기간에만 반복 (예: 6.13-7.10)</label>
+    <input type="text" id="rp-range" placeholder="6.13-7.10">
+    <label class="ko">제외 날짜 — 건너뛸 날짜 (예: 7.19, 7.26)</label>
+    <input type="text" id="rp-excl" placeholder="7.19, 7.26">
+    <div class="modal-actions">
+      <button id="rp-cancel" class="ko">취소</button>
+      <button class="primary ko" id="rp-ok">확인</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -662,6 +730,10 @@ const DIAL_END   = 22 * 60;
 const PALETTE = ['#3b82f6','#16a34a','#d97706','#8b5cf6','#0d9488','#db2777','#64748b'];
 const COLOR_ONTIME = '#dc2626';
 const COLOR_MISSED = '#111111';
+const COLOR_SUPP_DEFAULT = '#16a34a';   // green — supplement "moment" lines on the Body pie
+const COLOR_FIT_DEFAULT  = '#d946ef';   // magenta — fitness arcs (incl. the merged 'fitness' arc)
+const FIT_DEFAULT_DUR    = 30;          // default fitness duration (minutes)
+const SUPP_WINDOW        = 180;         // supplement "Have you taken it?" prompt window (minutes, 3 h)
 const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KDOW_SHORT = ['일','월','화','수','목','금','토'];
 const KDOW_FULL  = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
@@ -745,13 +817,14 @@ function iconOf(type, key){
   const lib = type === 'supplement' ? SUPP_ICONS : FIT_ICONS;
   return (lib[key] || Object.values(lib)[0]).svg;
 }
-// Synthetic schedule-like object so a health record flows through the pie / timer / day engine
+// Synthetic schedule-like object so a health record flows through the pie / timer / day engine.
+// Supplements are a "moment" (no duration → dur 0, drawn as a line); fitness defaults to 15 min.
 function healthSchedule(r){
   return {
     id: r.id, name: r.itemName,
-    dur:  r.dur  || (r.type === 'fitness' ? 45 : 15),
+    dur:  r.type === 'fitness' ? (r.dur || FIT_DEFAULT_DUR) : 0,
     flex: HEALTH_FLEX,
-    color: r.color || (r.type === 'fitness' ? '#3b82f6' : '#16a34a'),
+    color: r.color || (r.type === 'fitness' ? COLOR_FIT_DEFAULT : COLOR_SUPP_DEFAULT),
     iconKey: r.iconKey, type: r.type, isHealth: true,
   };
 }
@@ -944,8 +1017,8 @@ const FIT_SEED = [
 //  Occurrence test — weekday repeat narrowed by an optional
 //  'M.D-M.D' range and 'M.D, M.D' excluded-day list
 // ============================================================
-function occursOn(s, d){
-  if (!s.days.includes(d.getDay())) return false;
+// Range + Excluded-days gate, shared by the recurrence modes
+function withinRangeAndNotExcluded(s, d){
   if (s.range){
     const m = s.range.match(/^\s*(\d{1,2})\.(\d{1,2})\s*-\s*(\d{1,2})\.(\d{1,2})\s*$/);
     if (m){
@@ -962,6 +1035,47 @@ function occursOn(s, d){
     if (s.excl.split(',').map(x => x.trim()).includes(key)) return false;
   }
   return true;
+}
+function occursOn(s, d){
+  // 'today' = a one-off on a single calendar date — no recurrence at all
+  if (s.mode === 'today') return dateStr(d) === s.onDate;
+  // 'weekly7' = repeat every 7 days from its anchor date; the weekday menu is
+  // ignored, but the Range / Excluded-days gates still apply
+  if (s.mode === 'weekly7'){
+    const anchor = parseDate(s.anchor);
+    if (d < anchor) return false;
+    const diff = Math.round((d - anchor) / 86400000);
+    if (diff % 7 !== 0) return false;
+    return withinRangeAndNotExcluded(s, d);
+  }
+  // normal: weekday repeat, narrowed by Range / Excluded days
+  if (!s.days || !s.days.includes(d.getDay())) return false;
+  return withinRangeAndNotExcluded(s, d);
+}
+// Does a health record fall on date d? Non-repeating → only its own date.
+// Repeating → from its anchor date onward, on the chosen weekday(s), within Range / Excluded days.
+function healthOccursOn(r, d){
+  if (!r.repeat) return dateStr(d) === r.date;
+  if (d < parseDate(r.date)) return false;
+  if (r.days && r.days.length && !r.days.includes(d.getDay())) return false;
+  return withinRangeAndNotExcluded(r, d);
+}
+// Default weekly recurrence used when the repeat toggle is first turned on:
+// same weekday as the anchor, four weekly occurrences (≈4-week range) from it.
+function defaultRepeatConfig(anchorStr){
+  const d = parseDate(anchorStr), end = addDays(d, 27);   // anchor, +7, +14, +21 (the +28 falls outside)
+  const range = (d.getMonth()+1)+'.'+d.getDate()+'-'+(end.getMonth()+1)+'.'+end.getDate();
+  return { repeat: true, days: [d.getDay()], range, excl: '' };
+}
+// Config to pre-fill the repeat popup for an existing record (weekday/range pre-selected even when off)
+function repeatCfgForEdit(rec){
+  const d = defaultRepeatConfig(rec.date);
+  return {
+    repeat: !!rec.repeat,
+    days:  (rec.days && rec.days.length) ? rec.days.slice() : d.days,
+    range:  rec.range || d.range,
+    excl:   rec.excl  || '',
+  };
 }
 
 // ============================================================
@@ -1020,9 +1134,10 @@ function computeDay(ds){
     out.push({ s, base, eff, run, startMin, status, dispColor, isHealth: false, passed });
   }
 
-  // ----- Health records assigned to this date (one-off, no cascade) -----
-  for (const r of state.healthRecords.filter(x => x.date === ds)){
+  // ----- Health records on this date (single-date or repeating; no cascade) -----
+  for (const r of state.healthRecords.filter(x => healthOccursOn(x, dObj))){
     const syn  = healthSchedule(r);
+    const isSupp = r.type === 'supplement';
     const base = timeToMin(r.time);
     let eff = base;
     const run = runs[r.id];
@@ -1032,12 +1147,22 @@ function computeDay(ds){
     } else if (run){
       const st = new Date(run.start);
       startMin = st.getHours()*60 + st.getMinutes() + st.getSeconds()/60;
-      startedInWindow = Math.abs(startMin - eff) <= syn.flex;
-      eff = startMin;
+      if (isSupp){
+        startedInWindow = true;   // a confirmed ("taken") supplement counts as done; keep its line at the scheduled time
+      } else {
+        startedInWindow = Math.abs(startMin - eff) <= syn.flex;
+        eff = startMin;
+      }
       const elapsed = (Date.now() - run.start) / 60000;
       status = (run.done || elapsed >= syn.dur) ? 'done' : 'running';
     } else if (!isToday){
       status = parseDate(ds) < parseDate(todayStr()) ? 'missed' : 'upcoming';
+    } else if (isSupp){
+      // supplements: prompt window runs from the scheduled time for SUPP_WINDOW (3 h);
+      // unconfirmed after that = failed (missed)
+      if (now < eff) status = 'upcoming';
+      else if (now <= eff + SUPP_WINDOW) status = 'window';
+      else status = 'missed';
     } else if (now < eff - syn.flex){
       status = 'upcoming';
     } else if (now <= eff + syn.flex){
@@ -1047,6 +1172,7 @@ function computeDay(ds){
     }
     let dispColor = syn.color;
     if (passed)                   dispColor = syn.color;
+    else if (isSupp && run)       dispColor = syn.color;     // taken → its own (green) colour, not red/black
     else if (run)                 dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
     else if (status === 'missed') dispColor = COLOR_MISSED;
     out.push({ s: syn, base, eff, run, startMin, status, dispColor, isHealth: true, rec: r, passed });
@@ -1077,6 +1203,14 @@ function finishSchedule(id){
   scheduleSave();
   renderAll();
 }
+// Supplements are a moment — no timer. Confirming ("Yes, taken") marks it done.
+function takeSupplement(id){
+  const ds = dayState(todayStr());
+  ds.runs[id] = { start: Date.now(), done: true };
+  toast('복용 완료: ' + nameForId(id), 'ok');
+  scheduleSave();
+  renderAll();
+}
 
 // ============================================================
 //  Rendering — Weeks
@@ -1098,8 +1232,8 @@ function renderWeeks(){
       if (d.getMonth() !== today.getMonth()) cls.push('other-month');
       const schedColors = state.schedules.filter(s => occursOn(s, d)).map(s => s.color);
       const healthColors = state.healthRecords
-        .filter(r => r.date === ds)
-        .map(r => r.color || (r.type === 'fitness' ? '#3b82f6' : '#16a34a'));
+        .filter(r => healthOccursOn(r, d))
+        .map(r => r.color || (r.type === 'fitness' ? COLOR_FIT_DEFAULT : COLOR_SUPP_DEFAULT));
       const dots = schedColors.concat(healthColors).slice(0, 7)
         .map(c => `<span class="dot" style="background:${c}"></span>`).join('');
       const showMonth = d.getDate() === 1 || (w === -1 && i === 0);
@@ -1166,24 +1300,81 @@ function spreadLabelsVertically(labels, C, R){
     if (!moved) break;
   }
 }
-function renderPie(entries){
-  const C = 180, R = 150;
-  let svg = `<svg viewBox="0 0 360 360">`;
-  svg += `<circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
+// flex-window arc band at the rim (shown while an item can still be started)
+function flexBand(C, R, e){
+  if (e.status !== 'upcoming' && e.status !== 'window') return '';
+  const f0 = Math.max(e.eff - e.s.flex, DIAL_START), f1 = Math.min(e.eff + e.s.flex, DIAL_END);
+  if (f1 <= f0) return '';
+  const [ax,ay] = polar(C,C,R+5,f0), [bx,by] = polar(C,C,R+5,f1);
+  const large = (f1-f0)/(DIAL_END-DIAL_START) > 0.5 ? 1 : 0;
+  return `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
+}
+// Small badge drawn just outside the "10" divider: a sun (10 AM, wake) and a sleeping
+// crescent moon (10 PM, sleep) — the dial's two 10-o'clocks coincide on this 12-hour face.
+function moonSunBadge(cx, cy){
+  const sx = cx - 8, mx = cx + 8;
+  let rays = '';
+  for (let i = 0; i < 8; i++){
+    const a = i * Math.PI / 4;
+    rays += `<line x1="${(sx+4.6*Math.cos(a)).toFixed(1)}" y1="${(cy+4.6*Math.sin(a)).toFixed(1)}" x2="${(sx+6.5*Math.cos(a)).toFixed(1)}" y2="${(cy+6.5*Math.sin(a)).toFixed(1)}"/>`;
+  }
+  const sun = `<g stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round">${rays}</g>`
+            + `<circle cx="${sx}" cy="${cy}" r="3.4" fill="#f59e0b"/>`;
+  // crescent via a white "bite" circle (the badge sits on the white panel background)
+  const moon = `<circle cx="${mx}" cy="${cy}" r="5" fill="#7c89b8"/>`
+             + `<circle cx="${(mx+2.4).toFixed(1)}" cy="${(cy-1.4).toFixed(1)}" r="4.4" fill="#ffffff"/>`;
+  const zzz = `<text x="${(mx+4).toFixed(1)}" y="${(cy-3.5).toFixed(1)}" font-size="5" font-weight="700" fill="#7c89b8">z</text>`
+            + `<text x="${(mx+7).toFixed(1)}" y="${(cy-6.5).toFixed(1)}" font-size="4" font-weight="700" fill="#7c89b8">z</text>`;
+  return `<g>${sun}${moon}${zzz}</g>`;
+}
+// shared dial furniture: de-overlap + draw the collected labels, then hour ticks,
+// the "now" hand (today only) and the centre dot; returns the closed <svg> string.
+function pieDecorate(svg, labelDefs, C, R){
+  spreadLabelsVertically(labelDefs, C, R);
+  for (const l of labelDefs){
+    if (Math.abs(l.y - l.ay) > 5){
+      svg += `<line x1="${l.ax}" y1="${l.ay}" x2="${l.x}" y2="${l.y}" stroke="#94a3b8" stroke-width="0.7" opacity="${(l.tOp*0.6).toFixed(2)}"/>`;
+    }
+    svg += `<text x="${l.x}" y="${l.y}" font-size="10" fill="#222" opacity="${l.tOp}" text-anchor="middle" dominant-baseline="middle" style="paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round">${l.text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
+  }
+  for (let h = 10; h < 22; h++){
+    const m = h*60;
+    const [x0,y0] = polar(C,C,R-6,m);
+    const [x1,y1] = polar(C,C,R,m);
+    svg += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#bbb" stroke-width="1.5"/>`;
+    const [lx,ly] = polar(C,C,R-20,m);
+    const lab = h === 12 ? '12P' : (h > 12 ? (h-12) : h);
+    // "10" is special — it's the dial's wake/sleep boundary (10 AM and 10 PM coincide)
+    const isTen = h === 10;
+    svg += `<text x="${lx}" y="${ly}" font-size="12" fill="${isTen ? '#dc2626' : '#999'}"${isTen ? ' font-weight="700"' : ''} text-anchor="middle" dominant-baseline="middle">${lab}</text>`;
+    if (isTen){
+      const [bx,by] = polar(C, C, R+19, m);
+      svg += moonSunBadge(bx, by);
+    }
+  }
+  if (selectedDate === todayStr()){
+    const nm = nowMin();
+    if (nm >= DIAL_START && nm <= DIAL_END){
+      const [hx,hy] = polar(C,C,R-12,nm);
+      svg += `<line x1="${C}" y1="${C}" x2="${hx}" y2="${hy}" stroke="#111" stroke-width="2"/>`;
+    }
+  }
+  return svg + `<circle cx="${C}" cy="${C}" r="4" fill="#111"/></svg>`;
+}
 
-  // schedule wedges (+ collect name labels to place after the de-overlap pass)
+// Day — Intelligence: schedules as colored wedges (current behaviour).
+function renderIntelPie(entries){
+  const C = 180, R = 150;
+  let svg = `<svg viewBox="0 0 360 360"><circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
   const labelDefs = [];
   for (const e of entries){
     const op = e.status === 'done' ? 0.4 : e.status === 'missed' ? 0.3 : 0.55;
     const m0 = Math.max(e.eff, DIAL_START), m1 = Math.min(e.eff + e.s.dur, DIAL_END);
     const p = wedgePath(C, C, R, e.eff, e.eff + e.s.dur);
     if (p){
-      // "Already Passed" items are drawn as an outline only — transparent fill,
-      // just a stroke in the item's own colour (neither success-red nor miss-black).
       if (e.passed) svg += `<path d="${p}" fill="none" stroke="${e.s.color}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
       else          svg += `<path d="${p}" fill="${e.dispColor}" opacity="${op}"/>`;
     }
-    // name label inside the wedge — length budget grows with duration
     if (m1 > m0){
       const maxLen = e.s.dur <= 15 ? 2 : e.s.dur <= 30 ? 5 : e.s.dur <= 60 ? 8 : 12;
       const label = e.s.name.slice(0, maxLen);
@@ -1193,87 +1384,120 @@ function renderPie(entries){
         labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
       }
     }
-    // flex window arc band at rim
-    if (e.status === 'upcoming' || e.status === 'window'){
-      const f0 = Math.max(e.eff - e.s.flex, DIAL_START), f1 = Math.min(e.eff + e.s.flex, DIAL_END);
-      if (f1 > f0){
-        const [ax,ay] = polar(C,C,R+5,f0), [bx,by] = polar(C,C,R+5,f1);
-        const large = (f1-f0)/(DIAL_END-DIAL_START) > 0.5 ? 1 : 0;
-        svg += `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
+    svg += flexBand(C, R, e);
+  }
+  $('#pieWrapIntel').innerHTML = pieDecorate(svg, labelDefs, C, R);
+}
+
+// Day — Body: supplements as "moment" lines (no duration); fitness as arcs, with any
+// overlapping fitness items (≥1 min) merged into a single 'fitness' arc (magenta).
+function renderBodyPie(entries){
+  const C = 180, R = 150;
+  let svg = `<svg viewBox="0 0 360 360"><circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
+  const labelDefs = [];
+
+  // --- fitness: merge overlapping [eff, eff+dur] intervals into clusters ---
+  const segs = entries.filter(e => e.s.type === 'fitness')
+    .map(e => ({ a: e.eff, b: e.eff + e.s.dur, e }))
+    .filter(seg => seg.b > seg.a)
+    .sort((x,y) => x.a - y.a);
+  const clusters = [];
+  for (const seg of segs){
+    const last = clusters[clusters.length - 1];
+    if (last && seg.a < last.b){             // strict overlap (≥1 min) → merge
+      last.b = Math.max(last.b, seg.b);
+      last.items.push(seg.e);
+    } else {
+      clusters.push({ a: seg.a, b: seg.b, items: [seg.e] });
+    }
+  }
+  for (const cl of clusters){
+    const merged = cl.items.length > 1;
+    const m0 = Math.max(cl.a, DIAL_START), m1 = Math.min(cl.b, DIAL_END);
+    const p = wedgePath(C, C, R, cl.a, cl.b);
+    const allPassed = cl.items.every(it => it.passed);
+    const color = merged ? COLOR_FIT_DEFAULT : cl.items[0].dispColor;
+    if (p){
+      if (allPassed) svg += `<path d="${p}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
+      else {
+        const op = cl.items.every(it => it.status === 'done') ? 0.4
+                 : cl.items.every(it => it.status === 'missed') ? 0.3 : 0.55;
+        svg += `<path d="${p}" fill="${color}" opacity="${op}"/>`;
       }
     }
-  }
-  // spread overlapping labels apart vertically, then draw each (with a faint
-  // leader line back to its wedge when it had to move, and a white halo so the
-  // text reads cleanly over the colored wedges underneath)
-  spreadLabelsVertically(labelDefs, C, R);
-  for (const l of labelDefs){
-    if (Math.abs(l.y - l.ay) > 5){
-      svg += `<line x1="${l.ax}" y1="${l.ay}" x2="${l.x}" y2="${l.y}" stroke="#94a3b8" stroke-width="0.7" opacity="${(l.tOp*0.6).toFixed(2)}"/>`;
+    if (m1 > m0){
+      const label = merged ? 'fitness' : cl.items[0].s.name.slice(0, (cl.b - cl.a) <= 15 ? 4 : 8);
+      if (label){
+        const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
+        const tOp = allPassed ? 0.7 : 0.85;
+        labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
+      }
     }
-    svg += `<text x="${l.x}" y="${l.y}" font-size="10" fill="#222" opacity="${l.tOp}" text-anchor="middle" dominant-baseline="middle" style="paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round">${l.text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
+    if (!merged) svg += flexBand(C, R, cl.items[0]);   // single fitness keeps its take-window band
   }
 
-  // hour ticks + labels
-  for (let h = 10; h < 22; h++){
-    const m = h*60;
-    const [x0,y0] = polar(C,C,R-6,m);
-    const [x1,y1] = polar(C,C,R,m);
-    svg += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#bbb" stroke-width="1.5"/>`;
-    const [lx,ly] = polar(C,C,R-20,m);
-    const lab = h === 12 ? '12P' : (h > 12 ? (h-12) : h);
-    svg += `<text x="${lx}" y="${ly}" font-size="12" fill="#999" text-anchor="middle" dominant-baseline="middle">${lab}</text>`;
-  }
-
-  // now hand (today only, inside dial range)
-  if (selectedDate === todayStr()){
-    const nm = nowMin();
-    if (nm >= DIAL_START && nm <= DIAL_END){
-      const [hx,hy] = polar(C,C,R-12,nm);
-      svg += `<line x1="${C}" y1="${C}" x2="${hx}" y2="${hy}" stroke="#111" stroke-width="2"/>`;
+  // --- supplements: a moment → a radial line at its time (green by default) ---
+  for (const e of entries.filter(x => x.s.type === 'supplement')){
+    const m = e.eff;
+    if (m < DIAL_START || m > DIAL_END) continue;
+    const [x,y] = polar(C, C, R, m);
+    const opv  = e.status === 'done' ? 0.55 : e.status === 'missed' ? 0.45 : 0.95;
+    const dash = e.passed ? ` stroke-dasharray="5 3"` : '';
+    svg += `<line x1="${C}" y1="${C}" x2="${x}" y2="${y}" stroke="${e.dispColor}" stroke-width="2.5" stroke-linecap="round" opacity="${opv}"${dash}/>`;
+    // no rim band for supplements — the take-window is the 3 h prompt, not a ±flex arc
+    const label = e.s.name.slice(0, 6);
+    if (label){
+      const [lx,ly] = polar(C, C, R * 0.82, m);
+      const tOp = (e.status === 'done' || e.status === 'missed') ? 0.5 : 0.9;
+      labelDefs.push({ ax: lx, ay: ly, x: lx, y: ly, text: label, tOp, halfW: textHalfWidth(label, 10) });
     }
   }
-  svg += `<circle cx="${C}" cy="${C}" r="4" fill="#111"/>`;
-  svg += `</svg>`;
-  $('#pieWrap').innerHTML = svg;
+
+  $('#pieWrapBody').innerHTML = pieDecorate(svg, labelDefs, C, R);
 }
 
 // ============================================================
 //  Rendering — Day list
 // ============================================================
 const BADGE_TEXT = { upcoming:'Upcoming', window:'Start now', running:'Running', done:'Done', missed:'Missed' };
+const SUPP_BADGE = { upcoming:'예정', window:'복용하기', running:'복용하기', done:'복용함', missed:'놓침' };
 
-function renderDayList(entries){
+function setDayTitles(){
   const d = parseDate(selectedDate);
-  $('#dayTitle').textContent =
-    KDOW_FULL[d.getDay()] + ', ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일, ' + d.getFullYear() +
-    (selectedDate === todayStr() ? ' (오늘)' : '');
+  const t = KDOW_FULL[d.getDay()] + ', ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일, ' + d.getFullYear() +
+            (selectedDate === todayStr() ? ' (오늘)' : '');
+  $('#dayTitleIntel').textContent = t;
+  $('#dayTitleBody').textContent  = t;
+}
 
-  const body = $('#schedBody');
-  $('#emptyNote').style.display = entries.length ? 'none' : 'block';
+function renderDayList(entries, bodySel, emptySel){
+  const body = $(bodySel);
+  $(emptySel).style.display = entries.length ? 'none' : 'block';
   body.innerHTML = entries.map(e => {
+    const isMoment = e.isHealth && e.s.type === 'supplement';   // supplements have no duration
     const shifted = Math.round(e.eff) !== e.base && !e.run;
     const timeCell =
       `<div class="time-main">${fmtMin(e.eff)}</div>` +
       (shifted ? `<div class="time-orig">${fmtMin(e.base)}</div>` : '') +
-      (e.run ? '' : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`);
-    const canStart = selectedDate === todayStr() && !e.run && (e.status === 'window' || e.status === 'missed');
-    const action = canStart
-      ? `<button class="start" data-start="${e.s.id}">Start</button>`
+      (e.run ? '' : isMoment ? `<div class="flex-note">3h 내</div>` : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`);
+    const canAct = selectedDate === todayStr() && !e.run && (e.status === 'window' || e.status === 'missed');
+    const action = canAct
+      ? (isMoment ? `<button class="start" data-take="${e.s.id}">복용</button>`
+                  : `<button class="start" data-start="${e.s.id}">Start</button>`)
       : (e.status === 'running' ? `<button data-finish="${e.s.id}" style="font-size:12px;padding:4px 10px">Finish</button>` : '');
     const swatchStyle = e.passed ? `background:transparent;box-shadow:inset 0 0 0 2px ${e.s.color}` : `background:${e.dispColor}`;
     const nameCell = e.isHealth
       ? `<span class="d-icon">${iconOf(e.s.type, e.s.iconKey)}</span>${esc(e.s.name)}`
       : `<span class="swatch" style="${swatchStyle}"></span>${e.s.name}`;
     const lastCell = e.isHealth
-      ? `<button class="edit-link" data-remove-health="${e.s.id}" title="이 날짜에서 제거">✕</button>`
+      ? `<button class="edit-link" data-edit-rep="${e.s.id}" title="반복 설정">Edit</button><button class="edit-link" data-remove-health="${e.s.id}" title="이 날짜에서 제거">✕</button>`
       : `<button class="edit-link" data-edit="${e.s.id}">Edit</button>`;
     const badgeCls = e.passed ? 'passed' : e.status;
-    const badgeTxt = e.passed ? '지남' : BADGE_TEXT[e.status];
+    const badgeTxt = e.passed ? '지남' : (isMoment ? SUPP_BADGE[e.status] : BADGE_TEXT[e.status]);
     return `<tr class="${e.status}">
       <td>${timeCell}</td>
       <td class="name">${nameCell}</td>
-      <td>${e.s.dur}m</td>
+      <td>${isMoment ? '—' : e.s.dur + 'm'}</td>
       <td><span class="badge ${badgeCls}">${badgeTxt}</span></td>
       <td>${action}</td>
       <td>${lastCell}</td>
@@ -1281,8 +1505,10 @@ function renderDayList(entries){
   }).join('');
 
   body.querySelectorAll('[data-start]').forEach(b => b.onclick = () => startSchedule(b.dataset.start));
+  body.querySelectorAll('[data-take]').forEach(b => b.onclick = () => takeSupplement(b.dataset.take));
   body.querySelectorAll('[data-finish]').forEach(b => b.onclick = () => finishSchedule(b.dataset.finish));
   body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
+  body.querySelectorAll('[data-edit-rep]').forEach(b => b.onclick = () => editRecordRepeat(b.dataset.editRep));
   body.querySelectorAll('[data-remove-health]').forEach(b => b.onclick = () => removeHealthRecord(b.dataset.removeHealth));
 }
 
@@ -1290,14 +1516,28 @@ function renderDayList(entries){
 //  Rendering — Banner
 // ============================================================
 function renderBanner(){
-  const entries = computeDay(todayStr());
-  const e = entries.find(x => x.status === 'window');
+  const wins = computeDay(todayStr()).filter(x => x.status === 'window');
   const banner = $('#banner');
-  if (!e){ banner.classList.remove('show'); return; }
-  const diff = Math.round(e.eff - nowMin());
-  const deltaTxt = diff >= 0 ? '&minus;' + diff + ' min.' : '+' + (-diff) + ' min.';
-  $('#bannerMsg').innerHTML = `Now, <span class="delta">${deltaTxt}</span> of <b>${e.s.name}</b>. Start?`;
-  $('#bannerStart').onclick = () => startSchedule(e.s.id);
+  if (!wins.length){ banner.classList.remove('show'); banner.innerHTML = ''; return; }
+  // One prompt row per item whose window is open right now. Supplements (a moment,
+  // no timer) ask "Have you taken it?" with a Yes button → marks done; everything
+  // else (schedules + fitness) offers Start → runs the timer.
+  banner.innerHTML = wins.map(e => {
+    if (e.isHealth && e.s.type === 'supplement'){
+      return `<div class="banner-row">
+        <span class="msg">💊 <b>${esc(e.s.name)}</b> — 복용하셨나요? <span class="delta">(Have you taken it?)</span></span>
+        <button class="start" data-take="${e.s.id}">Yes</button>
+      </div>`;
+    }
+    const diff = Math.round(e.eff - nowMin());
+    const deltaTxt = diff >= 0 ? '&minus;' + diff + ' min.' : '+' + (-diff) + ' min.';
+    return `<div class="banner-row">
+      <span class="msg">Now, <span class="delta">${deltaTxt}</span> of <b>${esc(e.s.name)}</b>. Start?</span>
+      <button class="start" data-start="${e.s.id}">Start</button>
+    </div>`;
+  }).join('');
+  banner.querySelectorAll('[data-take]').forEach(b => b.onclick = () => takeSupplement(b.dataset.take));
+  banner.querySelectorAll('[data-start]').forEach(b => b.onclick = () => startSchedule(b.dataset.start));
   banner.classList.add('show');
 }
 
@@ -1343,7 +1583,8 @@ function renderTimer(){
     center = `<text x="${C}" y="${C+6}" font-size="15" fill="#bbb" text-anchor="middle">No schedule running</text>`;
     name = '';
     const next = computeDay(todayStr()).find(x => x.status === 'upcoming' || x.status === 'window');
-    sub = next ? 'Next: ' + next.s.name + ' at ' + fmtMin(next.eff) + ' (±' + next.s.flex + 'm)' : '';
+    const nextWin = next && next.isHealth && next.s.type === 'supplement' ? '' : (next ? ' (±' + next.s.flex + 'm)' : '');
+    sub = next ? 'Next: ' + next.s.name + ' at ' + fmtMin(next.eff) + nextWin : '';
     $('#btnFinish').style.display = 'none';
   }
   svg += center + `</svg>`;
@@ -1358,8 +1599,13 @@ function renderTimer(){
 function renderAll(){
   renderWeeks();
   const entries = computeDay(selectedDate);
-  renderPie(entries);
-  renderDayList(entries);
+  const intel = entries.filter(e => !e.isHealth);   // Day — Intelligence (schedules)
+  const body  = entries.filter(e =>  e.isHealth);    // Day — Body (supplements + fitness)
+  setDayTitles();
+  renderIntelPie(intel);
+  renderBodyPie(body);
+  renderDayList(intel, '#schedBodyIntel', '#emptyNoteIntel');
+  renderDayList(body,  '#schedBodyBody',  '#emptyNoteBody');
   renderBanner();
   renderTimer();
   renderSupp();
@@ -1378,7 +1624,7 @@ setInterval(() => {
     const run = todayRuns[ent.s.id];
     if (run && !run.done && Date.now() - run.start >= ent.s.dur * 60000){
       run.done = true;
-      toast('Finished: ' + ent.s.name, 'ok');
+      if (ent.s.dur > 0) toast('Finished: ' + ent.s.name, 'ok');   // moments (dur 0) finish silently
       scheduleSave();
     }
   }
@@ -1389,8 +1635,13 @@ setInterval(() => {
     lastStatusSig = sig;
     renderWeeks();
     const entries = computeDay(selectedDate);
-    renderPie(entries);
-    renderDayList(entries);
+    const intel = entries.filter(x => !x.isHealth);
+    const body  = entries.filter(x =>  x.isHealth);
+    setDayTitles();
+    renderIntelPie(intel);
+    renderBodyPie(body);
+    renderDayList(intel, '#schedBodyIntel', '#emptyNoteIntel');
+    renderDayList(body,  '#schedBodyBody',  '#emptyNoteBody');
   }
   renderBanner();
 }, 1000);
@@ -1417,6 +1668,16 @@ function buildColors(sel){
     };
   });
 }
+// default Range for a new schedule: today → 4 weeks (28 days) later, as "M.D-M.D"
+function defaultScheduleRange(){
+  const a = parseDate(todayStr()), b = addDays(a, 28);
+  return (a.getMonth()+1)+'.'+a.getDate()+'-'+(b.getMonth()+1)+'.'+b.getDate();
+}
+// greyed example for Excluded days: a single date 7 days from now, as "M.D"
+function exclExampleDate(){
+  const d = addDays(parseDate(todayStr()), 7);
+  return (d.getMonth()+1)+'.'+d.getDate();
+}
 function openEditor(id){
   editingId = id || null;
   const s = id ? state.schedules.find(x => x.id === id) : null;
@@ -1425,8 +1686,12 @@ function openEditor(id){
   $('#f-time').value = s ? s.time : '12:30';
   $('#f-dur').value  = s ? s.dur  : 60;
   $('#f-flex').value = s ? s.flex : state.settings.defaultFlex;
-  $('#f-range').value = (s && s.range) || '';
-  $('#f-excl').value  = (s && s.excl)  || '';
+  // Range: a NEW schedule is pre-filled (actually filled) with today → 4 weeks later;
+  // editing keeps the saved value. Excluded days: never filled — show a greyed example (7 days out).
+  $('#f-range').value = s ? (s.range || '') : defaultScheduleRange();
+  $('#f-range').placeholder = defaultScheduleRange();
+  $('#f-excl').value  = (s && s.excl) || '';
+  $('#f-excl').placeholder = exclExampleDate();
   buildDayChecks(s ? s.days : [0,1,2,3,4,5,6]);
   buildColors(s ? s.color : PALETTE[state.schedules.length % PALETTE.length]);
   $('#f-delete').style.display = s ? '' : 'none';
@@ -1437,12 +1702,26 @@ function openEditor(id){
   const sd = parseDate(selectedDate);
   $('#f-passed-lbl').textContent =
     `Already Passed — log as done on ${(sd.getMonth()+1)}/${sd.getDate()}, started at its scheduled time`;
+  // recurrence mode toggles
+  $('#f-today').checked   = !!(s && s.mode === 'today');
+  $('#f-weekday').checked = !!(s && s.mode === 'weekly7');
+  updateScheduleModeUI();
   $('#editModal').classList.add('show');
 }
 function closeEditor(){ $('#editModal').classList.remove('show'); }
+// grey out the recurrence fields that the chosen mode makes irrelevant
+function updateScheduleModeUI(){
+  const today = $('#f-today').checked, weekday = $('#f-weekday').checked;
+  $('#fld-days').classList.toggle('disabled', today || weekday);   // weekday menu off for both modes
+  $('#fld-range').classList.toggle('disabled', today);             // range/excl only ignored for "today only"
+  $('#fld-excl').classList.toggle('disabled', today);
+}
 
 $('#btnAdd').onclick = () => openEditor(null);
 $('#f-cancel').onclick = closeEditor;
+// the two recurrence toggles are mutually exclusive
+$('#f-today').onchange   = () => { if ($('#f-today').checked)   $('#f-weekday').checked = false; updateScheduleModeUI(); };
+$('#f-weekday').onchange = () => { if ($('#f-weekday').checked) $('#f-today').checked   = false; updateScheduleModeUI(); };
 $('#f-delete').onclick = () => {
   if (!editingId) return;
   if (!confirm('Delete this schedule?')) return;
@@ -1456,13 +1735,20 @@ $('#f-delete').onclick = () => {
 $('#f-ok').onclick = () => {
   const name = $('#f-name').value.trim();
   if (!name){ toast('Enter a name', 'error'); return; }
-  const days = [...$$('#f-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
-  if (!days.length){ toast('Pick at least one day', 'error'); return; }
-  const range = $('#f-range').value.trim();
+  const todayOnly   = $('#f-today').checked;
+  const weekdayOnly = $('#f-weekday').checked;
+  const mode = todayOnly ? 'today' : weekdayOnly ? 'weekly7' : 'normal';
+
+  let days = [...$$('#f-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
+  if (mode === 'normal' && !days.length){ toast('Pick at least one day', 'error'); return; }
+
+  // Range / Excluded days apply in 'normal' and 'weekly7'; for 'today only' they are ignored (blanked)
+  let range = $('#f-range').value.trim();
+  let excl  = $('#f-excl').value.trim();
+  if (mode === 'today'){ range = ''; excl = ''; }
   if (range && !/^\d{1,2}\.\d{1,2}\s*-\s*\d{1,2}\.\d{1,2}$/.test(range)){
     toast('Range format: 6.12-7.8', 'error'); return;
   }
-  const excl = $('#f-excl').value.trim();
   if (excl && !/^\d{1,2}\.\d{1,2}(\s*,\s*\d{1,2}\.\d{1,2})*$/.test(excl)){
     toast('Excluded days format: 7.19, 7.26', 'error'); return;
   }
@@ -1479,7 +1765,16 @@ $('#f-ok').onclick = () => {
     range,
     excl,
     color: colorEl ? colorEl.dataset.c : PALETTE[0],
+    mode,
   };
+  if (mode === 'today'){
+    // one-off on a fixed calendar date (keep the original date when editing a 'today' schedule)
+    obj.onDate = (prev && prev.mode === 'today' && prev.onDate) ? prev.onDate : todayStr();
+  } else if (mode === 'weekly7'){
+    // every 7 days from this anchor; pin a single weekday so dots / Google sync stay correct
+    obj.anchor = (prev && prev.mode === 'weekly7' && prev.anchor) ? prev.anchor : todayStr();
+    obj.days = [parseDate(obj.anchor).getDay()];
+  }
   const i = state.schedules.findIndex(s => s.id === obj.id);
   if (i >= 0) state.schedules[i] = obj; else state.schedules.push(obj);
   // "Already Passed" → log a done-at-scheduled-time run on the selected day
@@ -1579,9 +1874,21 @@ function localDT(d){  // 'YYYY-MM-DDTHH:MM:SS' in local time
   return dateStr(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':00';
 }
 function buildEvent(s){
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // 'today' = a one-off on its fixed date → a single (non-recurring) event
+  if (s.mode === 'today'){
+    const sD = new Date(parseDate(s.onDate)); sD.setMinutes(timeToMin(s.time));
+    const eD = new Date(sD.getTime() + s.dur * 60000);
+    return {
+      summary: s.name,
+      description: 'Flex Structure schedule (Flex Window ±' + s.flex + ' min)',
+      start: { dateTime: localDT(sD), timeZone: tz },
+      end:   { dateTime: localDT(eD), timeZone: tz },
+      extendedProperties: { private: { flexStructureId: s.id } },
+    };
+  }
   const d0 = firstOccurrence(s);
   if (!d0) return null;
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startD = new Date(d0); startD.setMinutes(timeToMin(s.time));
   const endD   = new Date(startD.getTime() + s.dur * 60000);
 
@@ -1704,16 +2011,41 @@ async function deleteOrphans(token, calId){
 function buildHealthEvent(rec){
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startD = new Date(parseDate(rec.date)); startD.setMinutes(timeToMin(rec.time));
-  const dur = rec.dur || (rec.type === 'fitness' ? 45 : 15);
+  // supplements are a moment → a short 5-min marker block (Google has no zero-length event); fitness uses its duration
+  const dur = rec.type === 'fitness' ? (rec.dur || FIT_DEFAULT_DUR) : 5;
   const endD = new Date(startD.getTime() + dur * 60000);
   const kind = rec.type === 'fitness' ? '피트니스' : '보조제';
-  return {
+  const ev = {
     summary: rec.itemName,
     description: 'Flex Structure schedule (' + kind + ')' + (rec.sets ? ' ' + rec.sets + '×' + rec.reps : ''),
     start: { dateTime: localDT(startD), timeZone: tz },
     end:   { dateTime: localDT(endD),   timeZone: tz },
     extendedProperties: { private: { flexStructureId: rec.id } },
   };
+  // repeating health record → weekly recurring event (same weekday(s), UNTIL from range, EXDATE from excl)
+  if (rec.repeat && rec.days && rec.days.length){
+    let rrule = 'RRULE:FREQ=WEEKLY;BYDAY=' + rec.days.map(i => BYDAY[i]).join(',');
+    const range = resolveRange(rec);
+    if (range){
+      const u = new Date(range.en); u.setHours(23,59,59);
+      rrule += ';UNTIL=' + u.getUTCFullYear() + pad2(u.getUTCMonth()+1) + pad2(u.getUTCDate()) +
+               'T' + pad2(u.getUTCHours()) + pad2(u.getUTCMinutes()) + pad2(u.getUTCSeconds()) + 'Z';
+    }
+    const recurrence = [rrule];
+    if (rec.excl){
+      const stamps = rec.excl.split(',').map(x => x.trim()).map(t => {
+        const m = t.match(/^(\d{1,2})\.(\d{1,2})$/);
+        if (!m) return null;
+        let ex = new Date(startD.getFullYear(), +m[1]-1, +m[2]);
+        if (ex < startD) ex = new Date(startD.getFullYear()+1, +m[1]-1, +m[2]);
+        ex.setHours(startD.getHours(), startD.getMinutes(), 0, 0);
+        return dateStr(ex).replace(/-/g,'') + 'T' + pad2(ex.getHours()) + pad2(ex.getMinutes()) + '00';
+      }).filter(Boolean);
+      if (stamps.length) recurrence.push('EXDATE;TZID=' + tz + ':' + stamps.join(','));
+    }
+    ev.recurrence = recurrence;
+  }
+  return ev;
 }
 async function pushHealthRecord(token, calId, rec){
   const ev = buildHealthEvent(rec);
@@ -1795,11 +2127,61 @@ $$('.modal-bg').forEach(bg => bg.addEventListener('click', (e) => {
 function removeHealthRecord(id){
   const r = state.healthRecords.find(x => x.id === id);
   if (!r) return;
-  if (r.gcalId) (state.gcalTrash = state.gcalTrash || []).push(r.gcalId);
-  state.healthRecords = state.healthRecords.filter(x => x.id !== id);
+  // for a repeating record the ✕ removes just the selected day's occurrence (adds an exclusion);
+  // a single-date record is deleted outright
+  if (r.repeat){
+    const d = parseDate(selectedDate);
+    const key = (d.getMonth()+1) + '.' + d.getDate();
+    const set = new Set((r.excl || '').split(',').map(x => x.trim()).filter(Boolean));
+    set.add(key);
+    r.excl = [...set].join(', ');
+  } else {
+    if (r.gcalId) (state.gcalTrash = state.gcalTrash || []).push(r.gcalId);
+    state.healthRecords = state.healthRecords.filter(x => x.id !== id);
+  }
   scheduleSave();
   renderAll();
 }
+// Open the repeat-options popup to change an existing record's recurrence (from the list "Edit")
+function editRecordRepeat(id){
+  const rec = state.healthRecords.find(r => r.id === id);
+  if (!rec) return;
+  openRepeatOptions(repeatCfgForEdit(rec), out => {
+    rec.repeat = out.repeat;
+    if (out.repeat){ rec.days = out.days; rec.range = out.range; rec.excl = out.excl; }
+    else { rec.repeat = false; }
+    scheduleSave(); renderAll();
+  });
+}
+
+// ----- Repeat-options popup (weekday selector / range / excluded days) -----
+let repeatOnSave = null;
+function buildRepeatDays(days){
+  $('#rp-days').innerHTML = DOW_NAMES.map((n,i) =>
+    `<label class="day-chk ${days.includes(i) ? 'on' : ''}" data-d="${i}"><input type="checkbox">${n}</label>`).join('');
+  $$('#rp-days .day-chk').forEach(el => el.onclick = (ev) => { ev.preventDefault(); el.classList.toggle('on'); });
+}
+function openRepeatOptions(config, onSave){
+  repeatOnSave = onSave;
+  $('#rp-on').checked = !!config.repeat;
+  buildRepeatDays(config.days || []);
+  $('#rp-range').value = config.range || '';
+  $('#rp-excl').value  = config.excl  || '';
+  $('#repeatModal').classList.add('show');
+}
+$('#rp-cancel').onclick = () => { repeatOnSave = null; $('#repeatModal').classList.remove('show'); };
+$('#rp-ok').onclick = () => {
+  const repeat = $('#rp-on').checked;
+  const days  = [...$$('#rp-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
+  const range = $('#rp-range').value.trim();
+  const excl  = $('#rp-excl').value.trim();
+  if (repeat && !days.length){ toast('요일을 선택하세요', 'error'); return; }
+  if (range && !/^\d{1,2}\.\d{1,2}\s*-\s*\d{1,2}\.\d{1,2}$/.test(range)){ toast('기간 형식: 6.13-7.10', 'error'); return; }
+  if (excl && !/^\d{1,2}\.\d{1,2}(\s*,\s*\d{1,2}\.\d{1,2})*$/.test(excl)){ toast('제외 형식: 7.19, 7.26', 'error'); return; }
+  $('#repeatModal').classList.remove('show');
+  const cb = repeatOnSave; repeatOnSave = null;
+  if (cb) cb({ repeat, days, range, excl });
+};
 
 // ----- Catalog lists -----
 function renderSupp(){
@@ -1958,10 +2340,12 @@ function confirmHealthAdd(){
   if (!name){ toast('이름을 입력하세요','error'); return; }
   if (!hAddIcon){ toast('아이콘을 선택하세요','error'); return; }
   if (hAddType==='supplement'){
-    state.supplements.push({ id:uid(), name, iconKey:hAddIcon, color:PALETTE[state.supplements.length%PALETTE.length], dur:15 });
+    // supplements are a moment (no duration); default colour green
+    state.supplements.push({ id:uid(), name, iconKey:hAddIcon, color:COLOR_SUPP_DEFAULT, dur:0 });
   } else {
     const sets=Math.max(1,+$('#hAddSets').value||3), reps=Math.max(1,+$('#hAddReps').value||15);
-    state.fitness.push({ id:uid(), name, iconKey:hAddIcon, sets, reps, color:PALETTE[state.fitness.length%PALETTE.length], dur:45 });
+    // fitness defaults: magenta, 30-minute duration
+    state.fitness.push({ id:uid(), name, iconKey:hAddIcon, sets, reps, color:COLOR_FIT_DEFAULT, dur:FIT_DEFAULT_DUR });
   }
   $('#hAddModal').classList.remove('show');
   renderAll(); scheduleSave();
@@ -2007,7 +2391,7 @@ function confirmHealthRemove(){
 function openHealthDay(){
   const d = parseDate(selectedDate);
   $('#hDayTitle').textContent = '＋Health — ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일' + (selectedDate===todayStr()?' (오늘)':'');
-  const dayRecs = state.healthRecords.filter(r => r.date===selectedDate);
+  const dayRecs = state.healthRecords.filter(r => healthOccursOn(r, d));   // includes repeating items on this day
 
   const suppEl=$('#hDaySupp'); suppEl.innerHTML='';
   if (!state.supplements.length) suppEl.innerHTML='<div class="empty-hint">보조제 목록이 없습니다</div>';
@@ -2027,6 +2411,10 @@ function makeHealthDayItem(item, type, existRec){
   const el=document.createElement('div');
   el.className='day-item';
   el.dataset.itemId=item.id; el.dataset.type=type; el.dataset.recId=existRec?existRec.id:'';
+  // per-row repeat config: prefilled (weekday + 4-week range) even when off
+  const anchor = existRec ? existRec.date : selectedDate;
+  const dft = defaultRepeatConfig(anchor);
+  el._repeatCfg = existRec ? repeatCfgForEdit(existRec) : { repeat:false, days:dft.days.slice(), range:dft.range, excl:'' };
 
   let meta='';
   if (type==='fitness') meta=`<div class="day-item-meta">${item.sets}×${item.reps}</div>`;
@@ -2052,6 +2440,8 @@ function makeHealthDayItem(item, type, existRec){
           <button type="button" class="step-btn" data-dir="1">+</button>
         </div>${hint}
         <label class="passed-chip" title="이미 지난 일정으로 기록 (예정 시간에 시작·종료한 것으로 처리)"><input type="checkbox" class="passed-input" ${passedOn?'checked':''}>이미 지남</label>
+        <label class="passed-chip" title="매주 같은 요일 반복 (기본 4주)"><input type="checkbox" class="repeat-input" ${el._repeatCfg.repeat?'checked':''}>매주 반복</label>
+        <button type="button" class="rep-opts-btn">반복 옵션</button>
       </div>
     </div>
     <div class="check-circle ${on?'on':''}">${on?'✓':''}</div>`;
@@ -2063,6 +2453,17 @@ function makeHealthDayItem(item, type, existRec){
   function setTime(mins){ mins=Math.max(lo,Math.min(hi,mins)); stepper.dataset.time=minToTimeRaw(mins); renderStep(); }
   el.querySelectorAll('.step-btn').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setTime(timeToMin(stepper.dataset.time)+(+b.dataset.dir)*15); }));
   renderStep();
+  // repeat toggle + options
+  const repInput = el.querySelector('.repeat-input'), repBtn = el.querySelector('.rep-opts-btn');
+  repInput.addEventListener('change', e => {
+    e.stopPropagation();
+    el._repeatCfg.repeat = repInput.checked;
+    if (repInput.checked && !el._repeatCfg.days.length) Object.assign(el._repeatCfg, defaultRepeatConfig(anchor));
+  });
+  repBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    openRepeatOptions(el._repeatCfg, out => { el._repeatCfg = out; repInput.checked = out.repeat; });
+  });
   el.addEventListener('click', e => {
     if (e.target.closest('.day-item-time-wrap')) return;
     const wasOn=circle.classList.contains('on');
@@ -2082,6 +2483,7 @@ function saveHealthDay(){
       let time=(stepper&&stepper.dataset.time)||recTime||'09:00';   // no clamp — any time allowed
       const passedChk=el.querySelector('.passed-input');
       const passed=!!(passedChk && passedChk.checked);
+      const cfg = el._repeatCfg || { repeat:false };
       if (isOn){
         const item=itemsArr.find(x=>x.id===itemId); if (!item) return;
         let id=recId;
@@ -2090,10 +2492,17 @@ function saveHealthDay(){
           if (rec){ rec.time=time; rec.itemName=item.name; rec.iconKey=item.iconKey; rec.color=item.color; }
         } else {
           const rec={ id:uid(), date:selectedDate, time, type, itemId:item.id, itemName:item.name,
-                      iconKey:item.iconKey, color:item.color||(type==='fitness'?'#3b82f6':'#16a34a'), dur:item.dur||(type==='fitness'?45:15) };
+                      iconKey:item.iconKey, color:item.color||(type==='fitness'?COLOR_FIT_DEFAULT:COLOR_SUPP_DEFAULT),
+                      dur: type==='fitness' ? (item.dur||FIT_DEFAULT_DUR) : 0 };
           if (type==='fitness'){ rec.sets=item.sets; rec.reps=item.reps; }
           state.healthRecords.push(rec);
           id=rec.id;
+        }
+        // apply this row's repeat configuration to the record
+        const recObj = state.healthRecords.find(r=>r.id===id);
+        if (recObj){
+          recObj.repeat = !!cfg.repeat;
+          if (cfg.repeat){ recObj.days = cfg.days; recObj.range = cfg.range; recObj.excl = cfg.excl; }
         }
         setPassedRun(id, time, passed);   // "이미 지남" → log as done at the scheduled time
       } else if (recId){
@@ -2112,23 +2521,40 @@ function saveHealthDay(){
 }
 
 // ----- Seed catalog once -----
-const HEALTH_SEED_VERSION = 1;
+const HEALTH_SEED_VERSION = 3;
 function seedHealthCatalog(){
-  SUPP_SEED.forEach((seed,i) => {
+  SUPP_SEED.forEach((seed) => {
     let s=state.supplements.find(x=>x.name===seed.name);
     if (!s){ s={id:uid()}; state.supplements.push(s); }
     Object.assign(s,{ name:seed.name, iconKey:s.iconKey||seed.iconKey, dose:seed.dose, perWeek:seed.perWeek, recTime:seed.recTime, recLabel:seed.recLabel, note:seed.note });
-    if (!s.color) s.color=PALETTE[i%PALETTE.length];
-    if (!s.dur) s.dur=15;
+    s.color=COLOR_SUPP_DEFAULT;   // supplements: green
+    s.dur=0;                      // moment — no duration
   });
-  FIT_SEED.forEach((seed,i) => {
+  FIT_SEED.forEach((seed) => {
     if (!state.fitness.some(f=>f.name===seed.name))
-      state.fitness.push({ id:uid(), ...seed, color:PALETTE[(i+3)%PALETTE.length], dur:45 });
+      state.fitness.push({ id:uid(), ...seed, color:COLOR_FIT_DEFAULT, dur:FIT_DEFAULT_DUR });
   });
+}
+// v2: supplements → green moments (dur 0), fitness → magenta, across catalog + records
+function migrateHealthV2(){
+  state.supplements.forEach(s => { s.color=COLOR_SUPP_DEFAULT; s.dur=0; });
+  state.fitness.forEach(f => { f.color=COLOR_FIT_DEFAULT; });
+  state.healthRecords.forEach(r => {
+    if (r.type==='supplement'){ r.color=COLOR_SUPP_DEFAULT; r.dur=0; }
+    else { r.color=COLOR_FIT_DEFAULT; }
+  });
+}
+// v3: fitness default duration is now 30 min (was 15, originally 45)
+function migrateHealthV3(){
+  const fix = d => (!d || d===15 || d===45) ? FIT_DEFAULT_DUR : d;
+  state.fitness.forEach(f => { f.dur = fix(f.dur); });
+  state.healthRecords.forEach(r => { if (r.type==='fitness') r.dur = fix(r.dur); });
 }
 function runHealthMigrations(){
   const v=state.healthSeedVersion||0;
   if (v<1) seedHealthCatalog();
+  if (v<2) migrateHealthV2();
+  if (v<3) migrateHealthV3();
   const pending = v<HEALTH_SEED_VERSION;
   state.healthSeedVersion=HEALTH_SEED_VERSION;
   return pending;
