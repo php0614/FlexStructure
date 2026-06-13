@@ -79,6 +79,15 @@ to **any time of day** in 15-minute steps (no range limit); exercises default to
 Each item also has an **이미 지남** (Already Passed) checkbox to retro-log it as done on time
 (see *Already Passed* above). Save writes a **health record** for that date.
 
+**Repeating health items.** Each item in the +Health editor has a **매주 반복 (repeat)** toggle and
+a **반복 옵션 (repeat options)** button. Turning the toggle on repeats the item **weekly on the same
+weekday, four times** (a ~4-week range) starting from the chosen day. The **repeat options** popup
+exposes a **weekday selector**, a **limit range**, and **excluded days** — pre-filled with that
+weekday and 4-week range, all editable (e.g. add Mon+Wed, shorten the range, skip a date). You can
+change an item's repetition any time via the **Edit** button next to it in the **Day — Body** list;
+on a repeating item the **✕** removes only that day's occurrence (it adds an exclusion), while for a
+one-off it deletes the record. Repeating items also sync to Google Calendar as a weekly recurring event.
+
 **Everything flows through the same engine.** A health record assigned to a day appears on the
 **Body pie**, in the **Day — Body table** (with its icon and a ✕ to remove it from that day), and
 as a **dot in the Weeks calendar**. They differ at action time:
@@ -128,7 +137,7 @@ data,"{""settings"":{""defaultFlex"":15},""schedules"":[{""id"":""s1"",""name"":
 - `schedules` — task definitions: name, set time, duration (min), Flex Window (± min), weekdays (0=Sun…6=Sat), `range` (`"6.12-7.8"` or empty), `excl` (`"7.19, 7.26"` or empty), color, `gcalId` once synced, and a `mode`: `normal` (weekday repeat), `today` (one-off on `onDate`), or `weekly7` (every 7 days from `anchor`).
 - `dayStates` — per-date run records (`{start, done, passed?}`: actual start timestamp + done flag, plus `passed:true` for items retro-logged via *Already Passed*). Entries older than 30 days are pruned automatically on save.
 - `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, dur; supplements are moments → `dur 0`, green; fitness → `dur 30`, magenta; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded/migrated by `healthSeedVersion` (v2 = moment/colour defaults, v3 = fitness 30-min default — both applied to existing data).
-- `healthRecords` — health items assigned to specific dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`. These drive the pie, timer/prompt and Weeks dots for that day and sync as single-date Google events (fitness uses its real duration; **supplements sync as a 5-minute marker** since Google has no zero-length event).
+- `healthRecords` — health items assigned to dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`, plus optional recurrence `{repeat, days, range, excl}` (when `repeat`, `date` is the anchor and the item recurs on `days` within `range`, skipping `excl`). They drive the pie, timer/prompt and Weeks dots, and sync to Google as single-date events — or weekly recurring events when `repeat` is set (fitness uses its real duration; **supplements sync as a 5-minute marker** since Google has no zero-length event).
 - Saving is automatic (debounced ~1 s after any change); **Save**/**Reload** buttons force it manually. Loads always cache-bust so every device sees fresh data.
 
 ## Google Calendar sync

@@ -232,6 +232,7 @@
     padding: 16px;
   }
   .modal-bg.show { display: flex; }
+  #repeatModal { z-index: 110; }   /* stack above the +Health editor */
   .modal {
     background: #fff;
     border-radius: 14px;
@@ -370,6 +371,12 @@
     color: #6366f1; cursor: pointer; user-select: none; font-family: "Noto Sans KR", sans-serif;
   }
   .passed-chip input { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #6366f1; }
+  .rep-opts-btn {
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
+    border: 1px solid var(--line); background: #f8f8ff; color: #6366f1; cursor: pointer;
+    font-family: "Noto Sans KR", sans-serif; line-height: 1.3;
+  }
+  .rep-opts-btn:hover { border-color: #6366f1; background: #eef2ff; }
 
   /* ---------- Icon grid (add modal) ---------- */
   .icon-grid {
@@ -676,6 +683,27 @@
     <div class="modal-actions" style="flex-direction:column;gap:8px;align-items:stretch">
       <button class="primary ko" id="hInfoOk">확인</button>
       <button class="btn-delete ko" id="hInfoDelete">🗑 이 항목 삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- Repeat options (health items) ---------- -->
+<div class="modal-bg" id="repeatModal">
+  <div class="modal">
+    <h3 class="ko">반복 설정 (Repeat)</h3>
+    <div class="switch-row" style="margin-top:4px">
+      <span class="lbl ko">매주 반복 — 같은 요일에 반복</span>
+      <label class="switch"><input type="checkbox" id="rp-on"><span class="knob"></span></label>
+    </div>
+    <label class="ko">요일 (Weekday)</label>
+    <div class="days-row" id="rp-days"></div>
+    <label class="ko">기간 — 이 기간에만 반복 (예: 6.13-7.10)</label>
+    <input type="text" id="rp-range" placeholder="6.13-7.10">
+    <label class="ko">제외 날짜 — 건너뛸 날짜 (예: 7.19, 7.26)</label>
+    <input type="text" id="rp-excl" placeholder="7.19, 7.26">
+    <div class="modal-actions">
+      <button id="rp-cancel" class="ko">취소</button>
+      <button class="primary ko" id="rp-ok">확인</button>
     </div>
   </div>
 </div>
@@ -1024,6 +1052,31 @@ function occursOn(s, d){
   if (!s.days || !s.days.includes(d.getDay())) return false;
   return withinRangeAndNotExcluded(s, d);
 }
+// Does a health record fall on date d? Non-repeating → only its own date.
+// Repeating → from its anchor date onward, on the chosen weekday(s), within Range / Excluded days.
+function healthOccursOn(r, d){
+  if (!r.repeat) return dateStr(d) === r.date;
+  if (d < parseDate(r.date)) return false;
+  if (r.days && r.days.length && !r.days.includes(d.getDay())) return false;
+  return withinRangeAndNotExcluded(r, d);
+}
+// Default weekly recurrence used when the repeat toggle is first turned on:
+// same weekday as the anchor, four weekly occurrences (≈4-week range) from it.
+function defaultRepeatConfig(anchorStr){
+  const d = parseDate(anchorStr), end = addDays(d, 27);   // anchor, +7, +14, +21 (the +28 falls outside)
+  const range = (d.getMonth()+1)+'.'+d.getDate()+'-'+(end.getMonth()+1)+'.'+end.getDate();
+  return { repeat: true, days: [d.getDay()], range, excl: '' };
+}
+// Config to pre-fill the repeat popup for an existing record (weekday/range pre-selected even when off)
+function repeatCfgForEdit(rec){
+  const d = defaultRepeatConfig(rec.date);
+  return {
+    repeat: !!rec.repeat,
+    days:  (rec.days && rec.days.length) ? rec.days.slice() : d.days,
+    range:  rec.range || d.range,
+    excl:   rec.excl  || '',
+  };
+}
 
 // ============================================================
 //  Core: effective times with flexible cascade
@@ -1081,8 +1134,8 @@ function computeDay(ds){
     out.push({ s, base, eff, run, startMin, status, dispColor, isHealth: false, passed });
   }
 
-  // ----- Health records assigned to this date (one-off, no cascade) -----
-  for (const r of state.healthRecords.filter(x => x.date === ds)){
+  // ----- Health records on this date (single-date or repeating; no cascade) -----
+  for (const r of state.healthRecords.filter(x => healthOccursOn(x, dObj))){
     const syn  = healthSchedule(r);
     const isSupp = r.type === 'supplement';
     const base = timeToMin(r.time);
@@ -1179,8 +1232,8 @@ function renderWeeks(){
       if (d.getMonth() !== today.getMonth()) cls.push('other-month');
       const schedColors = state.schedules.filter(s => occursOn(s, d)).map(s => s.color);
       const healthColors = state.healthRecords
-        .filter(r => r.date === ds)
-        .map(r => r.color || (r.type === 'fitness' ? '#3b82f6' : '#16a34a'));
+        .filter(r => healthOccursOn(r, d))
+        .map(r => r.color || (r.type === 'fitness' ? COLOR_FIT_DEFAULT : COLOR_SUPP_DEFAULT));
       const dots = schedColors.concat(healthColors).slice(0, 7)
         .map(c => `<span class="dot" style="background:${c}"></span>`).join('');
       const showMonth = d.getDate() === 1 || (w === -1 && i === 0);
@@ -1413,7 +1466,7 @@ function renderDayList(entries, bodySel, emptySel){
       ? `<span class="d-icon">${iconOf(e.s.type, e.s.iconKey)}</span>${esc(e.s.name)}`
       : `<span class="swatch" style="${swatchStyle}"></span>${e.s.name}`;
     const lastCell = e.isHealth
-      ? `<button class="edit-link" data-remove-health="${e.s.id}" title="이 날짜에서 제거">✕</button>`
+      ? `<button class="edit-link" data-edit-rep="${e.s.id}" title="반복 설정">Edit</button><button class="edit-link" data-remove-health="${e.s.id}" title="이 날짜에서 제거">✕</button>`
       : `<button class="edit-link" data-edit="${e.s.id}">Edit</button>`;
     const badgeCls = e.passed ? 'passed' : e.status;
     const badgeTxt = e.passed ? '지남' : (isMoment ? SUPP_BADGE[e.status] : BADGE_TEXT[e.status]);
@@ -1431,6 +1484,7 @@ function renderDayList(entries, bodySel, emptySel){
   body.querySelectorAll('[data-take]').forEach(b => b.onclick = () => takeSupplement(b.dataset.take));
   body.querySelectorAll('[data-finish]').forEach(b => b.onclick = () => finishSchedule(b.dataset.finish));
   body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
+  body.querySelectorAll('[data-edit-rep]').forEach(b => b.onclick = () => editRecordRepeat(b.dataset.editRep));
   body.querySelectorAll('[data-remove-health]').forEach(b => b.onclick = () => removeHealthRecord(b.dataset.removeHealth));
 }
 
@@ -1923,13 +1977,37 @@ function buildHealthEvent(rec){
   const dur = rec.type === 'fitness' ? (rec.dur || FIT_DEFAULT_DUR) : 5;
   const endD = new Date(startD.getTime() + dur * 60000);
   const kind = rec.type === 'fitness' ? '피트니스' : '보조제';
-  return {
+  const ev = {
     summary: rec.itemName,
     description: 'Flex Structure schedule (' + kind + ')' + (rec.sets ? ' ' + rec.sets + '×' + rec.reps : ''),
     start: { dateTime: localDT(startD), timeZone: tz },
     end:   { dateTime: localDT(endD),   timeZone: tz },
     extendedProperties: { private: { flexStructureId: rec.id } },
   };
+  // repeating health record → weekly recurring event (same weekday(s), UNTIL from range, EXDATE from excl)
+  if (rec.repeat && rec.days && rec.days.length){
+    let rrule = 'RRULE:FREQ=WEEKLY;BYDAY=' + rec.days.map(i => BYDAY[i]).join(',');
+    const range = resolveRange(rec);
+    if (range){
+      const u = new Date(range.en); u.setHours(23,59,59);
+      rrule += ';UNTIL=' + u.getUTCFullYear() + pad2(u.getUTCMonth()+1) + pad2(u.getUTCDate()) +
+               'T' + pad2(u.getUTCHours()) + pad2(u.getUTCMinutes()) + pad2(u.getUTCSeconds()) + 'Z';
+    }
+    const recurrence = [rrule];
+    if (rec.excl){
+      const stamps = rec.excl.split(',').map(x => x.trim()).map(t => {
+        const m = t.match(/^(\d{1,2})\.(\d{1,2})$/);
+        if (!m) return null;
+        let ex = new Date(startD.getFullYear(), +m[1]-1, +m[2]);
+        if (ex < startD) ex = new Date(startD.getFullYear()+1, +m[1]-1, +m[2]);
+        ex.setHours(startD.getHours(), startD.getMinutes(), 0, 0);
+        return dateStr(ex).replace(/-/g,'') + 'T' + pad2(ex.getHours()) + pad2(ex.getMinutes()) + '00';
+      }).filter(Boolean);
+      if (stamps.length) recurrence.push('EXDATE;TZID=' + tz + ':' + stamps.join(','));
+    }
+    ev.recurrence = recurrence;
+  }
+  return ev;
 }
 async function pushHealthRecord(token, calId, rec){
   const ev = buildHealthEvent(rec);
@@ -2011,11 +2089,61 @@ $$('.modal-bg').forEach(bg => bg.addEventListener('click', (e) => {
 function removeHealthRecord(id){
   const r = state.healthRecords.find(x => x.id === id);
   if (!r) return;
-  if (r.gcalId) (state.gcalTrash = state.gcalTrash || []).push(r.gcalId);
-  state.healthRecords = state.healthRecords.filter(x => x.id !== id);
+  // for a repeating record the ✕ removes just the selected day's occurrence (adds an exclusion);
+  // a single-date record is deleted outright
+  if (r.repeat){
+    const d = parseDate(selectedDate);
+    const key = (d.getMonth()+1) + '.' + d.getDate();
+    const set = new Set((r.excl || '').split(',').map(x => x.trim()).filter(Boolean));
+    set.add(key);
+    r.excl = [...set].join(', ');
+  } else {
+    if (r.gcalId) (state.gcalTrash = state.gcalTrash || []).push(r.gcalId);
+    state.healthRecords = state.healthRecords.filter(x => x.id !== id);
+  }
   scheduleSave();
   renderAll();
 }
+// Open the repeat-options popup to change an existing record's recurrence (from the list "Edit")
+function editRecordRepeat(id){
+  const rec = state.healthRecords.find(r => r.id === id);
+  if (!rec) return;
+  openRepeatOptions(repeatCfgForEdit(rec), out => {
+    rec.repeat = out.repeat;
+    if (out.repeat){ rec.days = out.days; rec.range = out.range; rec.excl = out.excl; }
+    else { rec.repeat = false; }
+    scheduleSave(); renderAll();
+  });
+}
+
+// ----- Repeat-options popup (weekday selector / range / excluded days) -----
+let repeatOnSave = null;
+function buildRepeatDays(days){
+  $('#rp-days').innerHTML = DOW_NAMES.map((n,i) =>
+    `<label class="day-chk ${days.includes(i) ? 'on' : ''}" data-d="${i}"><input type="checkbox">${n}</label>`).join('');
+  $$('#rp-days .day-chk').forEach(el => el.onclick = (ev) => { ev.preventDefault(); el.classList.toggle('on'); });
+}
+function openRepeatOptions(config, onSave){
+  repeatOnSave = onSave;
+  $('#rp-on').checked = !!config.repeat;
+  buildRepeatDays(config.days || []);
+  $('#rp-range').value = config.range || '';
+  $('#rp-excl').value  = config.excl  || '';
+  $('#repeatModal').classList.add('show');
+}
+$('#rp-cancel').onclick = () => { repeatOnSave = null; $('#repeatModal').classList.remove('show'); };
+$('#rp-ok').onclick = () => {
+  const repeat = $('#rp-on').checked;
+  const days  = [...$$('#rp-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
+  const range = $('#rp-range').value.trim();
+  const excl  = $('#rp-excl').value.trim();
+  if (repeat && !days.length){ toast('요일을 선택하세요', 'error'); return; }
+  if (range && !/^\d{1,2}\.\d{1,2}\s*-\s*\d{1,2}\.\d{1,2}$/.test(range)){ toast('기간 형식: 6.13-7.10', 'error'); return; }
+  if (excl && !/^\d{1,2}\.\d{1,2}(\s*,\s*\d{1,2}\.\d{1,2})*$/.test(excl)){ toast('제외 형식: 7.19, 7.26', 'error'); return; }
+  $('#repeatModal').classList.remove('show');
+  const cb = repeatOnSave; repeatOnSave = null;
+  if (cb) cb({ repeat, days, range, excl });
+};
 
 // ----- Catalog lists -----
 function renderSupp(){
@@ -2225,7 +2353,7 @@ function confirmHealthRemove(){
 function openHealthDay(){
   const d = parseDate(selectedDate);
   $('#hDayTitle').textContent = '＋Health — ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일' + (selectedDate===todayStr()?' (오늘)':'');
-  const dayRecs = state.healthRecords.filter(r => r.date===selectedDate);
+  const dayRecs = state.healthRecords.filter(r => healthOccursOn(r, d));   // includes repeating items on this day
 
   const suppEl=$('#hDaySupp'); suppEl.innerHTML='';
   if (!state.supplements.length) suppEl.innerHTML='<div class="empty-hint">보조제 목록이 없습니다</div>';
@@ -2245,6 +2373,10 @@ function makeHealthDayItem(item, type, existRec){
   const el=document.createElement('div');
   el.className='day-item';
   el.dataset.itemId=item.id; el.dataset.type=type; el.dataset.recId=existRec?existRec.id:'';
+  // per-row repeat config: prefilled (weekday + 4-week range) even when off
+  const anchor = existRec ? existRec.date : selectedDate;
+  const dft = defaultRepeatConfig(anchor);
+  el._repeatCfg = existRec ? repeatCfgForEdit(existRec) : { repeat:false, days:dft.days.slice(), range:dft.range, excl:'' };
 
   let meta='';
   if (type==='fitness') meta=`<div class="day-item-meta">${item.sets}×${item.reps}</div>`;
@@ -2270,6 +2402,8 @@ function makeHealthDayItem(item, type, existRec){
           <button type="button" class="step-btn" data-dir="1">+</button>
         </div>${hint}
         <label class="passed-chip" title="이미 지난 일정으로 기록 (예정 시간에 시작·종료한 것으로 처리)"><input type="checkbox" class="passed-input" ${passedOn?'checked':''}>이미 지남</label>
+        <label class="passed-chip" title="매주 같은 요일 반복 (기본 4주)"><input type="checkbox" class="repeat-input" ${el._repeatCfg.repeat?'checked':''}>매주 반복</label>
+        <button type="button" class="rep-opts-btn">반복 옵션</button>
       </div>
     </div>
     <div class="check-circle ${on?'on':''}">${on?'✓':''}</div>`;
@@ -2281,6 +2415,17 @@ function makeHealthDayItem(item, type, existRec){
   function setTime(mins){ mins=Math.max(lo,Math.min(hi,mins)); stepper.dataset.time=minToTimeRaw(mins); renderStep(); }
   el.querySelectorAll('.step-btn').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setTime(timeToMin(stepper.dataset.time)+(+b.dataset.dir)*15); }));
   renderStep();
+  // repeat toggle + options
+  const repInput = el.querySelector('.repeat-input'), repBtn = el.querySelector('.rep-opts-btn');
+  repInput.addEventListener('change', e => {
+    e.stopPropagation();
+    el._repeatCfg.repeat = repInput.checked;
+    if (repInput.checked && !el._repeatCfg.days.length) Object.assign(el._repeatCfg, defaultRepeatConfig(anchor));
+  });
+  repBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    openRepeatOptions(el._repeatCfg, out => { el._repeatCfg = out; repInput.checked = out.repeat; });
+  });
   el.addEventListener('click', e => {
     if (e.target.closest('.day-item-time-wrap')) return;
     const wasOn=circle.classList.contains('on');
@@ -2300,6 +2445,7 @@ function saveHealthDay(){
       let time=(stepper&&stepper.dataset.time)||recTime||'09:00';   // no clamp — any time allowed
       const passedChk=el.querySelector('.passed-input');
       const passed=!!(passedChk && passedChk.checked);
+      const cfg = el._repeatCfg || { repeat:false };
       if (isOn){
         const item=itemsArr.find(x=>x.id===itemId); if (!item) return;
         let id=recId;
@@ -2308,10 +2454,17 @@ function saveHealthDay(){
           if (rec){ rec.time=time; rec.itemName=item.name; rec.iconKey=item.iconKey; rec.color=item.color; }
         } else {
           const rec={ id:uid(), date:selectedDate, time, type, itemId:item.id, itemName:item.name,
-                      iconKey:item.iconKey, color:item.color||(type==='fitness'?'#3b82f6':'#16a34a'), dur:item.dur||(type==='fitness'?45:15) };
+                      iconKey:item.iconKey, color:item.color||(type==='fitness'?COLOR_FIT_DEFAULT:COLOR_SUPP_DEFAULT),
+                      dur: type==='fitness' ? (item.dur||FIT_DEFAULT_DUR) : 0 };
           if (type==='fitness'){ rec.sets=item.sets; rec.reps=item.reps; }
           state.healthRecords.push(rec);
           id=rec.id;
+        }
+        // apply this row's repeat configuration to the record
+        const recObj = state.healthRecords.find(r=>r.id===id);
+        if (recObj){
+          recObj.repeat = !!cfg.repeat;
+          if (cfg.repeat){ recObj.days = cfg.days; recObj.range = cfg.range; recObj.excl = cfg.excl; }
         }
         setPassedRun(id, time, passed);   // "이미 지남" → log as done at the scheduled time
       } else if (recId){
