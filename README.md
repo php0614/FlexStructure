@@ -22,9 +22,13 @@ shown on a Time-Timer-style dial.
 
 ## UI
 
-Responsive: single vertical column on phones (top→bottom: Timer, Day, Weeks); on wide screens
-a 3-column desktop layout (left→right: Timer, Day, Weeks). The green start banner always
-appears at the very top.
+Responsive: single vertical column on phones (top→bottom: Timer, Day, Weeks, 보조제, 피트니스);
+on wide screens a 3-column desktop layout — left column stacks **Timer / 보조제 복용 관리 /
+피트니스 관리**, the wide center is **Day**, the right is **Weeks**. The green start banner
+always appears at the very top.
+
+The header has two add buttons: **+Schedule** (a recurring flexible task — the original editor)
+and **+Health** (assign a 보조제 or 피트니스 item to the currently selected day).
 
 | Column | Content |
 |---|---|
@@ -39,6 +43,31 @@ passed without starting (a missed task can still be started late — the cascade
 was **started inside its Flex Window** turns **red** (both its tag in the list and its pie
 wedge). A schedule that was **not started in time** (window missed, or started outside the
 window) turns **black**. Untouched/upcoming schedules keep their own chosen color.
+
+## Health (보조제 & 피트니스)
+
+The HealthCare features are merged in. Two catalog panels live on the page:
+
+- **💊 보조제 복용 관리** — a catalog of supplements. Each seeded item carries a recommended
+  time (`recTime`), dose, weekly frequency and a note. **+ 추가** adds a new one (name + icon
+  from a rich SVG icon grid), **− 제거** removes. Right-click / long-press / tap the ⓘ to open
+  the **복용 정보** popup — recommended frequency & time, the adjustable ± window (a +/- stepper,
+  1–6 h, persisted per item), the note, and a delete button.
+- **🏋️ 피트니스 관리** — a catalog of exercises with sets × reps. The info popup shows a 2D
+  **front/back muscle diagram** highlighting the primary (red) and secondary (pink) target
+  muscles, plus muscle tags and a description.
+
+**Adding to a day — +Health.** Click **+Health** to open the day editor for the selected day
+(pick a day in Weeks first, otherwise it's today). Toggle any 보조제 / 피트니스 item on and set
+its time with the **+/- buttons** — supplements start at their recommended time and can be
+nudged in 15-minute steps within ±(their span); exercises default to 6 PM with a free range.
+Save writes a **health record** for that date.
+
+**Everything flows through the same engine.** A health record assigned to a day appears as a
+colored **wedge on the Day pie**, in the **Day table** (with its icon and a ✕ to remove it from
+that day), as a **dot in the Weeks calendar**, and — when its window is open — it can be
+**Started**, driving the same **Time-Timer countdown** (supplements default to a 15-min
+duration, exercises 45 min). They also **sync to Google Calendar** (see below).
 
 ## Cloud storage (Supabase)
 
@@ -74,13 +103,16 @@ data,"{""settings"":{""defaultFlex"":15},""schedules"":[{""id"":""s1"",""name"":
 - `settings` — default Flex Window plus Google sync settings: `gcalClientId`, `gcalCalendarId`, `autoSync`.
 - `schedules` — task definitions: name, set time, duration (min), Flex Window (± min), weekdays (0=Sun…6=Sat), `range` (`"6.12-7.8"` or empty), `excl` (`"7.19, 7.26"` or empty), color, and `gcalId` once synced to Google Calendar.
 - `dayStates` — per-date run records (actual start timestamps + done flags). Entries older than 30 days are pruned automatically on save.
+- `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, default duration; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded once on first run (`healthSeedVersion`).
+- `healthRecords` — health items assigned to specific dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`. These drive the pie, timer and Weeks dots for that day and sync as single-date Google events.
 - Saving is automatic (debounced ~1 s after any change); **Save**/**Reload** buttons force it manually. Loads always cache-bust so every device sees fresh data.
 
 ## Google Calendar sync
 
 Each schedule can be pushed to Google Calendar as a **recurring event**: weekly `RRULE` from
-its weekdays, `UNTIL` from its Range, `EXDATE` from its Excluded days. Re-syncing updates the
-existing event (the event id is stored per schedule in the CSV) instead of duplicating it.
+its weekdays, `UNTIL` from its Range, `EXDATE` from its Excluded days. **Health records** sync
+as **single (non-recurring) events** on their specific date and time. Re-syncing updates the
+existing event (the event id is stored per schedule / record in the CSV) instead of duplicating it.
 Sync also cleans up: schedules deleted in the app have their Google events deleted on the next
 sync, duplicates and orphaned app-created events are detected (via a private
 `flexStructureId` property on each event) and removed, and a lost event link is recovered by
@@ -111,12 +143,13 @@ In ⚙ Settings:
 ## Usage
 
 1. Open `index.html` in any browser (double-click, or host it — see Deploy below).
-2. Click **+** → set name, time, duration, Flex Window, weekdays, color.
+2. Click **+Schedule** → set name, time, duration, Flex Window, weekdays, color.
    - **Range** (optional): type `6.12-7.8` to repeat only from June 12 to July 8 (year-boundary ranges like `12.20-1.10` work too).
    - **Excluded days** (optional): type `7.19, 7.26` to skip those dates.
-3. ⚙ sets the default Flex Window for new schedules.
-4. When a task's window opens, the green banner appears — press **Start**.
-5. Watch the remaining time on the timer dial; **Finish now** ends early.
+3. Pick a day in **Weeks**, then click **+Health** → toggle a 보조제 / 피트니스 item on and set its time with the **+/- buttons** → Save.
+4. ⚙ sets the default Flex Window for new schedules.
+5. When a task's (or health item's) window opens, the green banner appears — press **Start**.
+6. Watch the remaining time on the timer dial; **Finish now** ends early.
 
 Keep the page open on the device you use during the day; the banner and timer update every second.
 
