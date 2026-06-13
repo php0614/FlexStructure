@@ -1309,6 +1309,24 @@ function flexBand(C, R, e){
   const large = (f1-f0)/(DIAL_END-DIAL_START) > 0.5 ? 1 : 0;
   return `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
 }
+// Small badge drawn just outside the "10" divider: a sun (10 AM, wake) and a sleeping
+// crescent moon (10 PM, sleep) — the dial's two 10-o'clocks coincide on this 12-hour face.
+function moonSunBadge(cx, cy){
+  const sx = cx - 8, mx = cx + 8;
+  let rays = '';
+  for (let i = 0; i < 8; i++){
+    const a = i * Math.PI / 4;
+    rays += `<line x1="${(sx+4.6*Math.cos(a)).toFixed(1)}" y1="${(cy+4.6*Math.sin(a)).toFixed(1)}" x2="${(sx+6.5*Math.cos(a)).toFixed(1)}" y2="${(cy+6.5*Math.sin(a)).toFixed(1)}"/>`;
+  }
+  const sun = `<g stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round">${rays}</g>`
+            + `<circle cx="${sx}" cy="${cy}" r="3.4" fill="#f59e0b"/>`;
+  // crescent via a white "bite" circle (the badge sits on the white panel background)
+  const moon = `<circle cx="${mx}" cy="${cy}" r="5" fill="#7c89b8"/>`
+             + `<circle cx="${(mx+2.4).toFixed(1)}" cy="${(cy-1.4).toFixed(1)}" r="4.4" fill="#ffffff"/>`;
+  const zzz = `<text x="${(mx+4).toFixed(1)}" y="${(cy-3.5).toFixed(1)}" font-size="5" font-weight="700" fill="#7c89b8">z</text>`
+            + `<text x="${(mx+7).toFixed(1)}" y="${(cy-6.5).toFixed(1)}" font-size="4" font-weight="700" fill="#7c89b8">z</text>`;
+  return `<g>${sun}${moon}${zzz}</g>`;
+}
 // shared dial furniture: de-overlap + draw the collected labels, then hour ticks,
 // the "now" hand (today only) and the centre dot; returns the closed <svg> string.
 function pieDecorate(svg, labelDefs, C, R){
@@ -1326,7 +1344,13 @@ function pieDecorate(svg, labelDefs, C, R){
     svg += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#bbb" stroke-width="1.5"/>`;
     const [lx,ly] = polar(C,C,R-20,m);
     const lab = h === 12 ? '12P' : (h > 12 ? (h-12) : h);
-    svg += `<text x="${lx}" y="${ly}" font-size="12" fill="#999" text-anchor="middle" dominant-baseline="middle">${lab}</text>`;
+    // "10" is special — it's the dial's wake/sleep boundary (10 AM and 10 PM coincide)
+    const isTen = h === 10;
+    svg += `<text x="${lx}" y="${ly}" font-size="12" fill="${isTen ? '#dc2626' : '#999'}"${isTen ? ' font-weight="700"' : ''} text-anchor="middle" dominant-baseline="middle">${lab}</text>`;
+    if (isTen){
+      const [bx,by] = polar(C, C, R+19, m);
+      svg += moonSunBadge(bx, by);
+    }
   }
   if (selectedDate === todayStr()){
     const nm = nowMin();
