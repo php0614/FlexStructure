@@ -81,13 +81,17 @@
     border: 1px solid #a7f3d0;
     margin: 12px 16px 0;
     border-radius: 12px;
-    padding: 14px 18px;
-    text-align: center;
+    padding: 8px 16px;
     animation: pulse 2s ease-in-out infinite;
   }
   #banner.show { display: block; }
-  #banner .msg { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+  #banner .banner-row {
+    display: flex; align-items: center; gap: 12px; padding: 6px 0;
+  }
+  #banner .banner-row + .banner-row { border-top: 1px solid #bbf7d0; }
+  #banner .msg { font-size: 15px; font-weight: 600; flex: 1; text-align: left; }
   #banner .msg .delta { color: var(--green); }
+  #banner .banner-row button { flex: none; }
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.25); }
     50%      { box-shadow: 0 0 0 8px rgba(22,163,74,0); }
@@ -257,6 +261,8 @@
   }
   .days-row label.day-chk input { display: none; }
   .days-row label.day-chk.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+  /* a recurrence field greyed out because a "Today only" / "This weekday only" toggle is on */
+  .fld.disabled { opacity: 0.4; pointer-events: none; }
   .color-row { display: flex; gap: 6px; margin-top: 4px; }
   .color-row .c {
     width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 2px solid transparent;
@@ -469,10 +475,7 @@
   <button id="btnReload">Reload</button>
 </header>
 
-<div id="banner">
-  <div class="msg" id="bannerMsg"></div>
-  <button class="start" id="bannerStart">Start</button>
-</div>
+<div id="banner"></div>
 
 <main>
   <!-- ---------- Timer ---------- -->
@@ -544,18 +547,32 @@
     <h3 id="editTitle">New Schedule</h3>
     <label>Name</label>
     <input type="text" id="f-name" placeholder="e.g. Lunch, Practice, Workout">
+    <div class="switch-row" style="margin-top:14px">
+      <span class="lbl">Today only — add to today’s date only (ignores all repeat settings)</span>
+      <label class="switch"><input type="checkbox" id="f-today"><span class="knob"></span></label>
+    </div>
+    <div class="switch-row">
+      <span class="lbl">This weekday only — repeat every 7 days from today</span>
+      <label class="switch"><input type="checkbox" id="f-weekday"><span class="knob"></span></label>
+    </div>
     <label>Scheduled time</label>
     <input type="time" id="f-time" value="12:30">
     <label>Duration (minutes)</label>
     <input type="number" id="f-dur" min="5" max="720" step="5" value="60">
     <label>Flex Window — can start &plusmn; this many minutes around the scheduled time</label>
     <input type="number" id="f-flex" min="0" max="120" step="5" value="15">
-    <label>Days</label>
-    <div class="days-row" id="f-days"></div>
-    <label>Range — repeat only between these dates (optional, e.g. 6.12-7.8)</label>
-    <input type="text" id="f-range" placeholder="6.12-7.8">
-    <label>Excluded days — skip these dates (optional, e.g. 7.19, 7.26)</label>
-    <input type="text" id="f-excl" placeholder="7.19, 7.26">
+    <div class="fld" id="fld-days">
+      <label>Days</label>
+      <div class="days-row" id="f-days"></div>
+    </div>
+    <div class="fld" id="fld-range">
+      <label>Range — repeat only between these dates (optional, e.g. 6.12-7.8)</label>
+      <input type="text" id="f-range" placeholder="6.12-7.8">
+    </div>
+    <div class="fld" id="fld-excl">
+      <label>Excluded days — skip these dates (optional, e.g. 7.19, 7.26)</label>
+      <input type="text" id="f-excl" placeholder="7.19, 7.26">
+    </div>
     <label>Color</label>
     <div class="color-row" id="f-colors"></div>
     <div class="switch-row">
@@ -687,6 +704,8 @@ const COLOR_ONTIME = '#dc2626';
 const COLOR_MISSED = '#111111';
 const COLOR_SUPP_DEFAULT = '#16a34a';   // green — supplement "moment" lines on the Body pie
 const COLOR_FIT_DEFAULT  = '#d946ef';   // magenta — fitness arcs (incl. the merged 'fitness' arc)
+const FIT_DEFAULT_DUR    = 30;          // default fitness duration (minutes)
+const SUPP_WINDOW        = 180;         // supplement "Have you taken it?" prompt window (minutes, 3 h)
 const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KDOW_SHORT = ['일','월','화','수','목','금','토'];
 const KDOW_FULL  = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
@@ -775,7 +794,7 @@ function iconOf(type, key){
 function healthSchedule(r){
   return {
     id: r.id, name: r.itemName,
-    dur:  r.type === 'fitness' ? (r.dur || 15) : 0,
+    dur:  r.type === 'fitness' ? (r.dur || FIT_DEFAULT_DUR) : 0,
     flex: HEALTH_FLEX,
     color: r.color || (r.type === 'fitness' ? COLOR_FIT_DEFAULT : COLOR_SUPP_DEFAULT),
     iconKey: r.iconKey, type: r.type, isHealth: true,
@@ -970,8 +989,8 @@ const FIT_SEED = [
 //  Occurrence test — weekday repeat narrowed by an optional
 //  'M.D-M.D' range and 'M.D, M.D' excluded-day list
 // ============================================================
-function occursOn(s, d){
-  if (!s.days.includes(d.getDay())) return false;
+// Range + Excluded-days gate, shared by the recurrence modes
+function withinRangeAndNotExcluded(s, d){
   if (s.range){
     const m = s.range.match(/^\s*(\d{1,2})\.(\d{1,2})\s*-\s*(\d{1,2})\.(\d{1,2})\s*$/);
     if (m){
@@ -988,6 +1007,22 @@ function occursOn(s, d){
     if (s.excl.split(',').map(x => x.trim()).includes(key)) return false;
   }
   return true;
+}
+function occursOn(s, d){
+  // 'today' = a one-off on a single calendar date — no recurrence at all
+  if (s.mode === 'today') return dateStr(d) === s.onDate;
+  // 'weekly7' = repeat every 7 days from its anchor date; the weekday menu is
+  // ignored, but the Range / Excluded-days gates still apply
+  if (s.mode === 'weekly7'){
+    const anchor = parseDate(s.anchor);
+    if (d < anchor) return false;
+    const diff = Math.round((d - anchor) / 86400000);
+    if (diff % 7 !== 0) return false;
+    return withinRangeAndNotExcluded(s, d);
+  }
+  // normal: weekday repeat, narrowed by Range / Excluded days
+  if (!s.days || !s.days.includes(d.getDay())) return false;
+  return withinRangeAndNotExcluded(s, d);
 }
 
 // ============================================================
@@ -1049,6 +1084,7 @@ function computeDay(ds){
   // ----- Health records assigned to this date (one-off, no cascade) -----
   for (const r of state.healthRecords.filter(x => x.date === ds)){
     const syn  = healthSchedule(r);
+    const isSupp = r.type === 'supplement';
     const base = timeToMin(r.time);
     let eff = base;
     const run = runs[r.id];
@@ -1058,12 +1094,22 @@ function computeDay(ds){
     } else if (run){
       const st = new Date(run.start);
       startMin = st.getHours()*60 + st.getMinutes() + st.getSeconds()/60;
-      startedInWindow = Math.abs(startMin - eff) <= syn.flex;
-      eff = startMin;
+      if (isSupp){
+        startedInWindow = true;   // a confirmed ("taken") supplement counts as done; keep its line at the scheduled time
+      } else {
+        startedInWindow = Math.abs(startMin - eff) <= syn.flex;
+        eff = startMin;
+      }
       const elapsed = (Date.now() - run.start) / 60000;
       status = (run.done || elapsed >= syn.dur) ? 'done' : 'running';
     } else if (!isToday){
       status = parseDate(ds) < parseDate(todayStr()) ? 'missed' : 'upcoming';
+    } else if (isSupp){
+      // supplements: prompt window runs from the scheduled time for SUPP_WINDOW (3 h);
+      // unconfirmed after that = failed (missed)
+      if (now < eff) status = 'upcoming';
+      else if (now <= eff + SUPP_WINDOW) status = 'window';
+      else status = 'missed';
     } else if (now < eff - syn.flex){
       status = 'upcoming';
     } else if (now <= eff + syn.flex){
@@ -1073,6 +1119,7 @@ function computeDay(ds){
     }
     let dispColor = syn.color;
     if (passed)                   dispColor = syn.color;
+    else if (isSupp && run)       dispColor = syn.color;     // taken → its own (green) colour, not red/black
     else if (run)                 dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
     else if (status === 'missed') dispColor = COLOR_MISSED;
     out.push({ s: syn, base, eff, run, startMin, status, dispColor, isHealth: true, rec: r, passed });
@@ -1100,6 +1147,14 @@ function startSchedule(id){
 function finishSchedule(id){
   const ds = dayState(todayStr());
   if (ds.runs[id]) ds.runs[id].done = true;
+  scheduleSave();
+  renderAll();
+}
+// Supplements are a moment — no timer. Confirming ("Yes, taken") marks it done.
+function takeSupplement(id){
+  const ds = dayState(todayStr());
+  ds.runs[id] = { start: Date.now(), done: true };
+  toast('복용 완료: ' + nameForId(id), 'ok');
   scheduleSave();
   renderAll();
 }
@@ -1312,7 +1367,7 @@ function renderBodyPie(entries){
     const opv  = e.status === 'done' ? 0.55 : e.status === 'missed' ? 0.45 : 0.95;
     const dash = e.passed ? ` stroke-dasharray="5 3"` : '';
     svg += `<line x1="${C}" y1="${C}" x2="${x}" y2="${y}" stroke="${e.dispColor}" stroke-width="2.5" stroke-linecap="round" opacity="${opv}"${dash}/>`;
-    svg += flexBand(C, R, e);
+    // no rim band for supplements — the take-window is the 3 h prompt, not a ±flex arc
     const label = e.s.name.slice(0, 6);
     if (label){
       const [lx,ly] = polar(C, C, R * 0.82, m);
@@ -1328,6 +1383,7 @@ function renderBodyPie(entries){
 //  Rendering — Day list
 // ============================================================
 const BADGE_TEXT = { upcoming:'Upcoming', window:'Start now', running:'Running', done:'Done', missed:'Missed' };
+const SUPP_BADGE = { upcoming:'예정', window:'복용하기', running:'복용하기', done:'복용함', missed:'놓침' };
 
 function setDayTitles(){
   const d = parseDate(selectedDate);
@@ -1346,10 +1402,11 @@ function renderDayList(entries, bodySel, emptySel){
     const timeCell =
       `<div class="time-main">${fmtMin(e.eff)}</div>` +
       (shifted ? `<div class="time-orig">${fmtMin(e.base)}</div>` : '') +
-      (e.run ? '' : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`);
-    const canStart = selectedDate === todayStr() && !e.run && (e.status === 'window' || e.status === 'missed');
-    const action = canStart
-      ? `<button class="start" data-start="${e.s.id}">Start</button>`
+      (e.run ? '' : isMoment ? `<div class="flex-note">3h 내</div>` : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`);
+    const canAct = selectedDate === todayStr() && !e.run && (e.status === 'window' || e.status === 'missed');
+    const action = canAct
+      ? (isMoment ? `<button class="start" data-take="${e.s.id}">복용</button>`
+                  : `<button class="start" data-start="${e.s.id}">Start</button>`)
       : (e.status === 'running' ? `<button data-finish="${e.s.id}" style="font-size:12px;padding:4px 10px">Finish</button>` : '');
     const swatchStyle = e.passed ? `background:transparent;box-shadow:inset 0 0 0 2px ${e.s.color}` : `background:${e.dispColor}`;
     const nameCell = e.isHealth
@@ -1359,7 +1416,7 @@ function renderDayList(entries, bodySel, emptySel){
       ? `<button class="edit-link" data-remove-health="${e.s.id}" title="이 날짜에서 제거">✕</button>`
       : `<button class="edit-link" data-edit="${e.s.id}">Edit</button>`;
     const badgeCls = e.passed ? 'passed' : e.status;
-    const badgeTxt = e.passed ? '지남' : BADGE_TEXT[e.status];
+    const badgeTxt = e.passed ? '지남' : (isMoment ? SUPP_BADGE[e.status] : BADGE_TEXT[e.status]);
     return `<tr class="${e.status}">
       <td>${timeCell}</td>
       <td class="name">${nameCell}</td>
@@ -1371,6 +1428,7 @@ function renderDayList(entries, bodySel, emptySel){
   }).join('');
 
   body.querySelectorAll('[data-start]').forEach(b => b.onclick = () => startSchedule(b.dataset.start));
+  body.querySelectorAll('[data-take]').forEach(b => b.onclick = () => takeSupplement(b.dataset.take));
   body.querySelectorAll('[data-finish]').forEach(b => b.onclick = () => finishSchedule(b.dataset.finish));
   body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
   body.querySelectorAll('[data-remove-health]').forEach(b => b.onclick = () => removeHealthRecord(b.dataset.removeHealth));
@@ -1380,14 +1438,28 @@ function renderDayList(entries, bodySel, emptySel){
 //  Rendering — Banner
 // ============================================================
 function renderBanner(){
-  const entries = computeDay(todayStr());
-  const e = entries.find(x => x.status === 'window');
+  const wins = computeDay(todayStr()).filter(x => x.status === 'window');
   const banner = $('#banner');
-  if (!e){ banner.classList.remove('show'); return; }
-  const diff = Math.round(e.eff - nowMin());
-  const deltaTxt = diff >= 0 ? '&minus;' + diff + ' min.' : '+' + (-diff) + ' min.';
-  $('#bannerMsg').innerHTML = `Now, <span class="delta">${deltaTxt}</span> of <b>${e.s.name}</b>. Start?`;
-  $('#bannerStart').onclick = () => startSchedule(e.s.id);
+  if (!wins.length){ banner.classList.remove('show'); banner.innerHTML = ''; return; }
+  // One prompt row per item whose window is open right now. Supplements (a moment,
+  // no timer) ask "Have you taken it?" with a Yes button → marks done; everything
+  // else (schedules + fitness) offers Start → runs the timer.
+  banner.innerHTML = wins.map(e => {
+    if (e.isHealth && e.s.type === 'supplement'){
+      return `<div class="banner-row">
+        <span class="msg">💊 <b>${esc(e.s.name)}</b> — 복용하셨나요? <span class="delta">(Have you taken it?)</span></span>
+        <button class="start" data-take="${e.s.id}">Yes</button>
+      </div>`;
+    }
+    const diff = Math.round(e.eff - nowMin());
+    const deltaTxt = diff >= 0 ? '&minus;' + diff + ' min.' : '+' + (-diff) + ' min.';
+    return `<div class="banner-row">
+      <span class="msg">Now, <span class="delta">${deltaTxt}</span> of <b>${esc(e.s.name)}</b>. Start?</span>
+      <button class="start" data-start="${e.s.id}">Start</button>
+    </div>`;
+  }).join('');
+  banner.querySelectorAll('[data-take]').forEach(b => b.onclick = () => takeSupplement(b.dataset.take));
+  banner.querySelectorAll('[data-start]').forEach(b => b.onclick = () => startSchedule(b.dataset.start));
   banner.classList.add('show');
 }
 
@@ -1433,7 +1505,8 @@ function renderTimer(){
     center = `<text x="${C}" y="${C+6}" font-size="15" fill="#bbb" text-anchor="middle">No schedule running</text>`;
     name = '';
     const next = computeDay(todayStr()).find(x => x.status === 'upcoming' || x.status === 'window');
-    sub = next ? 'Next: ' + next.s.name + ' at ' + fmtMin(next.eff) + ' (±' + next.s.flex + 'm)' : '';
+    const nextWin = next && next.isHealth && next.s.type === 'supplement' ? '' : (next ? ' (±' + next.s.flex + 'm)' : '');
+    sub = next ? 'Next: ' + next.s.name + ' at ' + fmtMin(next.eff) + nextWin : '';
     $('#btnFinish').style.display = 'none';
   }
   svg += center + `</svg>`;
@@ -1537,12 +1610,26 @@ function openEditor(id){
   const sd = parseDate(selectedDate);
   $('#f-passed-lbl').textContent =
     `Already Passed — log as done on ${(sd.getMonth()+1)}/${sd.getDate()}, started at its scheduled time`;
+  // recurrence mode toggles
+  $('#f-today').checked   = !!(s && s.mode === 'today');
+  $('#f-weekday').checked = !!(s && s.mode === 'weekly7');
+  updateScheduleModeUI();
   $('#editModal').classList.add('show');
 }
 function closeEditor(){ $('#editModal').classList.remove('show'); }
+// grey out the recurrence fields that the chosen mode makes irrelevant
+function updateScheduleModeUI(){
+  const today = $('#f-today').checked, weekday = $('#f-weekday').checked;
+  $('#fld-days').classList.toggle('disabled', today || weekday);   // weekday menu off for both modes
+  $('#fld-range').classList.toggle('disabled', today);             // range/excl only ignored for "today only"
+  $('#fld-excl').classList.toggle('disabled', today);
+}
 
 $('#btnAdd').onclick = () => openEditor(null);
 $('#f-cancel').onclick = closeEditor;
+// the two recurrence toggles are mutually exclusive
+$('#f-today').onchange   = () => { if ($('#f-today').checked)   $('#f-weekday').checked = false; updateScheduleModeUI(); };
+$('#f-weekday').onchange = () => { if ($('#f-weekday').checked) $('#f-today').checked   = false; updateScheduleModeUI(); };
 $('#f-delete').onclick = () => {
   if (!editingId) return;
   if (!confirm('Delete this schedule?')) return;
@@ -1556,13 +1643,20 @@ $('#f-delete').onclick = () => {
 $('#f-ok').onclick = () => {
   const name = $('#f-name').value.trim();
   if (!name){ toast('Enter a name', 'error'); return; }
-  const days = [...$$('#f-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
-  if (!days.length){ toast('Pick at least one day', 'error'); return; }
-  const range = $('#f-range').value.trim();
+  const todayOnly   = $('#f-today').checked;
+  const weekdayOnly = $('#f-weekday').checked;
+  const mode = todayOnly ? 'today' : weekdayOnly ? 'weekly7' : 'normal';
+
+  let days = [...$$('#f-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
+  if (mode === 'normal' && !days.length){ toast('Pick at least one day', 'error'); return; }
+
+  // Range / Excluded days apply in 'normal' and 'weekly7'; for 'today only' they are ignored (blanked)
+  let range = $('#f-range').value.trim();
+  let excl  = $('#f-excl').value.trim();
+  if (mode === 'today'){ range = ''; excl = ''; }
   if (range && !/^\d{1,2}\.\d{1,2}\s*-\s*\d{1,2}\.\d{1,2}$/.test(range)){
     toast('Range format: 6.12-7.8', 'error'); return;
   }
-  const excl = $('#f-excl').value.trim();
   if (excl && !/^\d{1,2}\.\d{1,2}(\s*,\s*\d{1,2}\.\d{1,2})*$/.test(excl)){
     toast('Excluded days format: 7.19, 7.26', 'error'); return;
   }
@@ -1579,7 +1673,16 @@ $('#f-ok').onclick = () => {
     range,
     excl,
     color: colorEl ? colorEl.dataset.c : PALETTE[0],
+    mode,
   };
+  if (mode === 'today'){
+    // one-off on a fixed calendar date (keep the original date when editing a 'today' schedule)
+    obj.onDate = (prev && prev.mode === 'today' && prev.onDate) ? prev.onDate : todayStr();
+  } else if (mode === 'weekly7'){
+    // every 7 days from this anchor; pin a single weekday so dots / Google sync stay correct
+    obj.anchor = (prev && prev.mode === 'weekly7' && prev.anchor) ? prev.anchor : todayStr();
+    obj.days = [parseDate(obj.anchor).getDay()];
+  }
   const i = state.schedules.findIndex(s => s.id === obj.id);
   if (i >= 0) state.schedules[i] = obj; else state.schedules.push(obj);
   // "Already Passed" → log a done-at-scheduled-time run on the selected day
@@ -1679,9 +1782,21 @@ function localDT(d){  // 'YYYY-MM-DDTHH:MM:SS' in local time
   return dateStr(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':00';
 }
 function buildEvent(s){
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // 'today' = a one-off on its fixed date → a single (non-recurring) event
+  if (s.mode === 'today'){
+    const sD = new Date(parseDate(s.onDate)); sD.setMinutes(timeToMin(s.time));
+    const eD = new Date(sD.getTime() + s.dur * 60000);
+    return {
+      summary: s.name,
+      description: 'Flex Structure schedule (Flex Window ±' + s.flex + ' min)',
+      start: { dateTime: localDT(sD), timeZone: tz },
+      end:   { dateTime: localDT(eD), timeZone: tz },
+      extendedProperties: { private: { flexStructureId: s.id } },
+    };
+  }
   const d0 = firstOccurrence(s);
   if (!d0) return null;
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startD = new Date(d0); startD.setMinutes(timeToMin(s.time));
   const endD   = new Date(startD.getTime() + s.dur * 60000);
 
@@ -1804,8 +1919,8 @@ async function deleteOrphans(token, calId){
 function buildHealthEvent(rec){
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startD = new Date(parseDate(rec.date)); startD.setMinutes(timeToMin(rec.time));
-  // supplements are a moment → a short 10-min marker block; fitness defaults to 15 min
-  const dur = rec.type === 'fitness' ? (rec.dur || 15) : 10;
+  // supplements are a moment → a short 5-min marker block (Google has no zero-length event); fitness uses its duration
+  const dur = rec.type === 'fitness' ? (rec.dur || FIT_DEFAULT_DUR) : 5;
   const endD = new Date(startD.getTime() + dur * 60000);
   const kind = rec.type === 'fitness' ? '피트니스' : '보조제';
   return {
@@ -2063,8 +2178,8 @@ function confirmHealthAdd(){
     state.supplements.push({ id:uid(), name, iconKey:hAddIcon, color:COLOR_SUPP_DEFAULT, dur:0 });
   } else {
     const sets=Math.max(1,+$('#hAddSets').value||3), reps=Math.max(1,+$('#hAddReps').value||15);
-    // fitness defaults: magenta, 15-minute duration
-    state.fitness.push({ id:uid(), name, iconKey:hAddIcon, sets, reps, color:COLOR_FIT_DEFAULT, dur:15 });
+    // fitness defaults: magenta, 30-minute duration
+    state.fitness.push({ id:uid(), name, iconKey:hAddIcon, sets, reps, color:COLOR_FIT_DEFAULT, dur:FIT_DEFAULT_DUR });
   }
   $('#hAddModal').classList.remove('show');
   renderAll(); scheduleSave();
@@ -2215,7 +2330,7 @@ function saveHealthDay(){
 }
 
 // ----- Seed catalog once -----
-const HEALTH_SEED_VERSION = 2;
+const HEALTH_SEED_VERSION = 3;
 function seedHealthCatalog(){
   SUPP_SEED.forEach((seed) => {
     let s=state.supplements.find(x=>x.name===seed.name);
@@ -2226,22 +2341,29 @@ function seedHealthCatalog(){
   });
   FIT_SEED.forEach((seed) => {
     if (!state.fitness.some(f=>f.name===seed.name))
-      state.fitness.push({ id:uid(), ...seed, color:COLOR_FIT_DEFAULT, dur:15 });
+      state.fitness.push({ id:uid(), ...seed, color:COLOR_FIT_DEFAULT, dur:FIT_DEFAULT_DUR });
   });
 }
-// v2: supplements → green moments (dur 0), fitness → magenta @ 15 min, across catalog + records
+// v2: supplements → green moments (dur 0), fitness → magenta, across catalog + records
 function migrateHealthV2(){
   state.supplements.forEach(s => { s.color=COLOR_SUPP_DEFAULT; s.dur=0; });
-  state.fitness.forEach(f => { f.color=COLOR_FIT_DEFAULT; if (!f.dur || f.dur===45) f.dur=15; });
+  state.fitness.forEach(f => { f.color=COLOR_FIT_DEFAULT; });
   state.healthRecords.forEach(r => {
     if (r.type==='supplement'){ r.color=COLOR_SUPP_DEFAULT; r.dur=0; }
-    else { r.color=COLOR_FIT_DEFAULT; if (!r.dur || r.dur===45) r.dur=15; }
+    else { r.color=COLOR_FIT_DEFAULT; }
   });
+}
+// v3: fitness default duration is now 30 min (was 15, originally 45)
+function migrateHealthV3(){
+  const fix = d => (!d || d===15 || d===45) ? FIT_DEFAULT_DUR : d;
+  state.fitness.forEach(f => { f.dur = fix(f.dur); });
+  state.healthRecords.forEach(r => { if (r.type==='fitness') r.dur = fix(r.dur); });
 }
 function runHealthMigrations(){
   const v=state.healthSeedVersion||0;
   if (v<1) seedHealthCatalog();
   if (v<2) migrateHealthV2();
+  if (v<3) migrateHealthV3();
   const pending = v<HEALTH_SEED_VERSION;
   state.healthSeedVersion=HEALTH_SEED_VERSION;
   return pending;

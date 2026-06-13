@@ -35,7 +35,7 @@ and **+Health** (assign a 보조제 or 피트니스 item to the currently select
 |---|---|
 | **Timer** (left / top) | Time-Timer-style countdown — a red sector that shrinks as the running task's remaining minutes tick down. "Finish now" ends a task early; tasks auto-complete when the countdown reaches zero. |
 | **Day — Intelligence** (center) | A 12-hour pie dial (10 AM – 10 PM, **12 PM at the top**) for **schedules only**. Tasks are drawn as colored wedges at their *effective* (shifted) times with the schedule name written inside each wedge (label length scales with duration: ≤15 min → 2 chars, ≤30 → 5, ≤60 → 8, longer → 12), their Flex Window as an arc on the rim, and a black "now" hand. When several schedules bunch up in a short time range their labels would collide, so an automatic de-overlap pass **spreads the names apart vertically** (one up, the next down) — each gets its own readable band, with a faint leader line back to its wedge and a white halo behind the text. Below it, a table lists the day's schedules with time, duration, status and Start/Finish buttons; a **finished** task is shown **dimmed/greyed** (colour change, not struck through). Date headings are in Korean (e.g. `금요일, 6월 12일, 2026 (오늘)`). |
-| **Day — Body** (center) | The same dial, for **health items only**. **Supplements are a "moment"** — no duration — so each is drawn as a **radial line** at its time (green by default), not an arc. **Fitness** items are arcs (15 min by default, magenta); any fitness items that **overlap each other by ≥1 minute are merged into a single arc labelled `fitness`** — though the underlying items are still listed individually in the table below. Started-on-time → red, missed → black, *Already Passed* → outline/dashed (see below). |
+| **Day — Body** (center) | The same dial, for **health items only**. **Supplements are a "moment"** — no duration, no timer — so each is drawn as a **radial line** at its time (green by default), not an arc; when its time comes a top-of-page prompt asks *"Have you taken it?"* for **3 hours** (see Health below). **Fitness** items are arcs (30 min by default, magenta) and **trigger the Time-Timer when Started**, like schedules; any fitness items that **overlap each other by ≥1 minute are merged into a single arc labelled `fitness`** — though the underlying items are still listed individually in the table below. Taken/started-on-time → green/red, missed/failed → black, *Already Passed* → outline/dashed (see below). |
 | **Weeks** (right / bottom) | 3-week calendar — last / this / next week. Colored dots mark which tasks occur on each day (weekday repeat narrowed by Range / Excluded days). Click a day to inspect it. |
 
 Statuses: `Upcoming → Start now (window open) → Running → Done`, or `Missed` if the window
@@ -67,7 +67,7 @@ The HealthCare features are merged in. Two catalog panels live on the page:
   1–6 h, persisted per item, now purely a guideline), the note, and a **delete button** (item
   removal lives here — there is no longer a separate remove button on the panel).
 - **🏋️ 피트니스 관리** — a catalog of exercises with sets × reps, **magenta** by default and a
-  **15-minute** default duration. The info popup shows a 2D **front/back muscle diagram**
+  **30-minute** default duration. The info popup shows a 2D **front/back muscle diagram**
   highlighting the primary (red) and secondary (pink) target muscles, plus muscle tags, a
   description, and a **delete button** (likewise the only place to remove an exercise — the
   panel's remove button has been dropped).
@@ -79,11 +79,19 @@ to **any time of day** in 15-minute steps (no range limit); exercises default to
 Each item also has an **이미 지남** (Already Passed) checkbox to retro-log it as done on time
 (see *Already Passed* above). Save writes a **health record** for that date.
 
-**Everything flows through the same engine.** A health record assigned to a day appears as a
-colored **wedge on the Day pie**, in the **Day table** (with its icon and a ✕ to remove it from
-that day), as a **dot in the Weeks calendar**, and — when its window is open — it can be
-**Started**, driving the same **Time-Timer countdown** (supplements default to a 15-min
-duration, exercises 45 min). They also **sync to Google Calendar** (see below).
+**Everything flows through the same engine.** A health record assigned to a day appears on the
+**Body pie**, in the **Day — Body table** (with its icon and a ✕ to remove it from that day), and
+as a **dot in the Weeks calendar**. They differ at action time:
+
+- **Fitness** behaves like a schedule: when its window opens it can be **Started**, driving the
+  **Time-Timer countdown** (30-min default duration), with **Finish now** to end early.
+- **Supplements are a moment — no timer.** When the scheduled time arrives, a **prompt appears at
+  the top**: *"💊 \<name\> — 복용하셨나요? (Have you taken it?)"* with a **Yes** button. Pressing
+  **Yes** marks it **done**. The prompt stays for **3 hours** from the scheduled time; if Yes is
+  never pressed within that window it disappears and the supplement is marked **failed (missed)**.
+  (You can also confirm it any time from the table's **복용** button.)
+
+They also **sync to Google Calendar** (see below).
 
 ## Cloud storage (Supabase)
 
@@ -117,10 +125,10 @@ data,"{""settings"":{""defaultFlex"":15},""schedules"":[{""id"":""s1"",""name"":
 ```
 
 - `settings` — default Flex Window plus Google sync settings: `gcalClientId`, `gcalCalendarId`, `autoSync`.
-- `schedules` — task definitions: name, set time, duration (min), Flex Window (± min), weekdays (0=Sun…6=Sat), `range` (`"6.12-7.8"` or empty), `excl` (`"7.19, 7.26"` or empty), color, and `gcalId` once synced to Google Calendar.
+- `schedules` — task definitions: name, set time, duration (min), Flex Window (± min), weekdays (0=Sun…6=Sat), `range` (`"6.12-7.8"` or empty), `excl` (`"7.19, 7.26"` or empty), color, `gcalId` once synced, and a `mode`: `normal` (weekday repeat), `today` (one-off on `onDate`), or `weekly7` (every 7 days from `anchor`).
 - `dayStates` — per-date run records (`{start, done, passed?}`: actual start timestamp + done flag, plus `passed:true` for items retro-logged via *Already Passed*). Entries older than 30 days are pruned automatically on save.
-- `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, dur; supplements are moments → `dur 0`, green; fitness → `dur 15`, magenta; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded/migrated by `healthSeedVersion` (v2 applies the moment/colour/duration defaults to existing data).
-- `healthRecords` — health items assigned to specific dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`. These drive the pie, timer and Weeks dots for that day and sync as single-date Google events.
+- `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, dur; supplements are moments → `dur 0`, green; fitness → `dur 30`, magenta; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded/migrated by `healthSeedVersion` (v2 = moment/colour defaults, v3 = fitness 30-min default — both applied to existing data).
+- `healthRecords` — health items assigned to specific dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`. These drive the pie, timer/prompt and Weeks dots for that day and sync as single-date Google events (fitness uses its real duration; **supplements sync as a 5-minute marker** since Google has no zero-length event).
 - Saving is automatic (debounced ~1 s after any change); **Save**/**Reload** buttons force it manually. Loads always cache-bust so every device sees fresh data.
 
 ## Google Calendar sync
@@ -162,6 +170,8 @@ In ⚙ Settings:
 2. Click **+Schedule** → set name, time, duration, Flex Window, weekdays, color.
    - **Range** (optional): type `6.12-7.8` to repeat only from June 12 to July 8 (year-boundary ranges like `12.20-1.10` work too).
    - **Excluded days** (optional): type `7.19, 7.26` to skip those dates.
+   - **Today only** (toggle): add the task to **today's date only** — the Days / Range / Excluded fields grey out and are ignored.
+   - **This weekday only** (toggle): repeat **every 7 days from today** — the weekday picker greys out, but Range / Excluded days still apply. (The two toggles are mutually exclusive; with neither on, the schedule repeats on the weekdays you pick, as before.)
 3. Pick a day in **Weeks**, then click **+Health** → toggle a 보조제 / 피트니스 item on and set its time with the **+/- buttons** → Save.
 4. ⚙ sets the default Flex Window for new schedules.
 5. When a task's (or health item's) window opens, the green banner appears — press **Start**.
