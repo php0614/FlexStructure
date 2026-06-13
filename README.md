@@ -33,7 +33,7 @@ and **+Health** (assign a 보조제 or 피트니스 item to the currently select
 | Column | Content |
 |---|---|
 | **Timer** (left / top) | Time-Timer-style countdown — a red sector that shrinks as the running task's remaining minutes tick down. "Finish now" ends a task early; tasks auto-complete when the countdown reaches zero. |
-| **Day** (center) | A 12-hour pie dial (10 AM – 10 PM, **12 PM at the top**). Tasks are drawn as colored wedges at their *effective* (shifted) times with the schedule name written inside each wedge (label length scales with duration: ≤15 min → 2 chars, ≤30 → 5, ≤60 → 8, longer → 12), their Flex Window as an arc on the rim, and a black "now" hand. Below it, a table lists the day's schedules with time, duration, status and Start/Finish buttons. Date headings are shown in Korean (e.g. `금요일, 6월 12일, 2026 (오늘)`). |
+| **Day** (center) | A 12-hour pie dial (10 AM – 10 PM, **12 PM at the top**). Tasks are drawn as colored wedges at their *effective* (shifted) times with the schedule name written inside each wedge (label length scales with duration: ≤15 min → 2 chars, ≤30 → 5, ≤60 → 8, longer → 12), their Flex Window as an arc on the rim, and a black "now" hand. When several schedules bunch up in a short time range their labels would collide, so an automatic de-overlap pass **spreads the names apart vertically** (one up, the next down) — each gets its own readable band, with a faint leader line back to its wedge and a white halo behind the text. Below it, a table lists the day's schedules with time, duration, status and Start/Finish buttons; a **finished** task (schedule or health item) is shown **dimmed/greyed** — its colour changes, it is no longer struck through. Date headings are shown in Korean (e.g. `금요일, 6월 12일, 2026 (오늘)`). |
 | **Weeks** (right / bottom) | 3-week calendar — last / this / next week. Colored dots mark which tasks occur on each day (weekday repeat narrowed by Range / Excluded days). Click a day to inspect it. |
 
 Statuses: `Upcoming → Start now (window open) → Running → Done`, or `Missed` if the window
@@ -50,17 +50,19 @@ The HealthCare features are merged in. Two catalog panels live on the page:
 
 - **💊 보조제 복용 관리** — a catalog of supplements. Each seeded item carries a recommended
   time (`recTime`), dose, weekly frequency and a note. **+ 추가** adds a new one (name + icon
-  from a rich SVG icon grid), **− 제거** removes. Right-click / long-press / tap the ⓘ to open
-  the **복용 정보** popup — recommended frequency & time, the adjustable ± window (a +/- stepper,
-  1–6 h, persisted per item), the note, and a delete button.
+  from a rich SVG icon grid). Right-click / long-press / tap the ⓘ to open the **복용 정보**
+  popup — recommended frequency & time, a recommended ± window (a +/- stepper, 1–6 h, persisted
+  per item, now purely a guideline), the note, and a **delete button** (item removal lives here —
+  there is no longer a separate remove button on the panel).
 - **🏋️ 피트니스 관리** — a catalog of exercises with sets × reps. The info popup shows a 2D
   **front/back muscle diagram** highlighting the primary (red) and secondary (pink) target
-  muscles, plus muscle tags and a description.
+  muscles, plus muscle tags, a description, and a **delete button** (likewise the only place to
+  remove an exercise — the panel's remove button has been dropped).
 
 **Adding to a day — +Health.** Click **+Health** to open the day editor for the selected day
 (pick a day in Weeks first, otherwise it's today). Toggle any 보조제 / 피트니스 item on and set
-its time with the **+/- buttons** — supplements start at their recommended time and can be
-nudged in 15-minute steps within ±(their span); exercises default to 6 PM with a free range.
+its time with the **+/- buttons** — supplements start at their recommended time but can be set
+to **any time of day** in 15-minute steps (no range limit); exercises default to 6 PM, also free.
 Save writes a **health record** for that date.
 
 **Everything flows through the same engine.** A health record assigned to a day appears as a

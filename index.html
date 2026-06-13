@@ -185,7 +185,6 @@
     vertical-align: middle;
   }
   table.sched tr.done td { color: var(--ink3); }
-  table.sched tr.done .name { text-decoration: line-through; }
   .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: 0; }
   .time-main { font-weight: 600; white-space: nowrap; }
   .time-orig { font-size: 11px; color: var(--ink3); text-decoration: line-through; white-space: nowrap; }
@@ -496,7 +495,6 @@
     <h2 class="ko">💊 보조제 복용 관리</h2>
     <div class="health-actions">
       <button class="btn-add ko" data-hadd="supplement">+ 추가</button>
-      <button class="btn-rm ko"  data-hrm="supplement">− 제거</button>
     </div>
     <div class="item-list" id="supp-list"></div>
   </section>
@@ -506,7 +504,6 @@
     <h2 class="ko">🏋️ 피트니스 관리</h2>
     <div class="health-actions">
       <button class="btn-add ko" data-hadd="fitness">+ 추가</button>
-      <button class="btn-rm ko"  data-hrm="fitness">− 제거</button>
     </div>
     <div class="item-list" id="fit-list"></div>
   </section>
@@ -1100,12 +1097,46 @@ function wedgePath(cx, cy, r, m0, m1){
   const large = (m1 - m0) / (DIAL_END - DIAL_START) > 0.5 ? 1 : 0;
   return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`;
 }
+// Approximate half the rendered width of a label (CJK glyphs are ~full em wide,
+// Latin ~0.56 em) so the de-overlap pass knows when two labels touch horizontally.
+function textHalfWidth(str, fs){
+  let w = 0;
+  for (const ch of String(str)) w += ch.charCodeAt(0) > 0x1100 ? fs : fs * 0.56;
+  return w / 2;
+}
+// When schedules sit close together in time their wedges — and thus their name
+// labels — bunch up at nearly the same angle and the text overlaps. This pushes
+// any colliding labels apart vertically (one up, the next down) until every name
+// has its own horizontal band, so all of them stay readable. Only the y of each
+// label moves; x stays on the wedge so a short leader line can reconnect it.
+function spreadLabelsVertically(labels, C, R){
+  if (labels.length < 2) return;
+  const LINE_H = 12, top = C - R + 12, bot = C + R - 12;
+  for (let iter = 0; iter < 200; iter++){
+    let moved = false;
+    for (let i = 0; i < labels.length; i++){
+      for (let j = i + 1; j < labels.length; j++){
+        const a = labels[i], b = labels[j];
+        if (Math.abs(a.x - b.x) >= a.halfW + b.halfW) continue;   // no horizontal overlap → ignore
+        const dy = b.y - a.y;
+        const gap = LINE_H - Math.abs(dy);
+        if (gap <= 0) continue;                                    // already enough vertical room
+        const push = gap / 2 + 0.25;
+        if (dy >= 0){ a.y -= push; b.y += push; } else { a.y += push; b.y -= push; }
+        moved = true;
+      }
+    }
+    for (const l of labels) l.y = Math.max(top, Math.min(bot, l.y));
+    if (!moved) break;
+  }
+}
 function renderPie(entries){
   const C = 180, R = 150;
   let svg = `<svg viewBox="0 0 360 360">`;
   svg += `<circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
 
-  // schedule wedges
+  // schedule wedges (+ collect name labels to place after the de-overlap pass)
+  const labelDefs = [];
   for (const e of entries){
     const op = e.status === 'done' ? 0.4 : e.status === 'missed' ? 0.3 : 0.55;
     const m0 = Math.max(e.eff, DIAL_START), m1 = Math.min(e.eff + e.s.dur, DIAL_END);
@@ -1115,9 +1146,11 @@ function renderPie(entries){
     if (m1 > m0){
       const maxLen = e.s.dur <= 15 ? 2 : e.s.dur <= 30 ? 5 : e.s.dur <= 60 ? 8 : 12;
       const label = e.s.name.slice(0, maxLen);
-      const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
-      const tOp = (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
-      svg += `<text x="${tx}" y="${ty}" font-size="10" fill="#333" opacity="${tOp}" text-anchor="middle" dominant-baseline="middle">${label.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
+      if (label){
+        const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
+        const tOp = (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
+        labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
+      }
     }
     // flex window arc band at rim
     if (e.status === 'upcoming' || e.status === 'window'){
@@ -1128,6 +1161,16 @@ function renderPie(entries){
         svg += `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
       }
     }
+  }
+  // spread overlapping labels apart vertically, then draw each (with a faint
+  // leader line back to its wedge when it had to move, and a white halo so the
+  // text reads cleanly over the colored wedges underneath)
+  spreadLabelsVertically(labelDefs, C, R);
+  for (const l of labelDefs){
+    if (Math.abs(l.y - l.ay) > 5){
+      svg += `<line x1="${l.ax}" y1="${l.ay}" x2="${l.x}" y2="${l.y}" stroke="#94a3b8" stroke-width="0.7" opacity="${(l.tOp*0.6).toFixed(2)}"/>`;
+    }
+    svg += `<text x="${l.x}" y="${l.y}" font-size="10" fill="#222" opacity="${l.tOp}" text-anchor="middle" dominant-baseline="middle" style="paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round">${l.text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
   }
 
   // hour ticks + labels
@@ -1933,12 +1976,10 @@ function makeHealthDayItem(item, type, existRec){
   const recTime = type==='supplement'?(item.recTime||''):'';
   el.dataset.recTime=recTime;
   const defTime = existRec?existRec.time:(recTime||(type==='fitness'?'18:00':'09:00'));
-  const span = recTime?(item.timeSpan||180):0;
-  let lo,hi;
-  if (recTime){ lo=timeToMin(recTime)-span; hi=timeToMin(recTime)+span; } else { lo=0; hi=1425; }
-  lo=Math.ceil(Math.max(0,lo)/15)*15; hi=Math.floor(Math.min(1439,hi)/15)*15;
+  // no time-range limit — any time of day can be set with the +/- buttons (15-min steps)
+  const lo = 0, hi = 1425;
   const hint = recTime
-    ? `<span class="time-hint">권장 ${fmt12(recTime)} · ±${Math.round(span/60)}시간 (15분 단위)</span>`
+    ? `<span class="time-hint">권장 ${fmt12(recTime)} (자유 설정 · 15분 단위)</span>`
     : `<span class="time-hint">15분 단위</span>`;
 
   el.innerHTML=`
@@ -1978,8 +2019,7 @@ function saveHealthDay(){
       const itemId=el.dataset.itemId, recId=el.dataset.recId, recTime=el.dataset.recTime||'';
       const isOn=el.querySelector('.check-circle').classList.contains('on');
       const stepper=el.querySelector('.time-stepper');
-      let time=(stepper&&stepper.dataset.time)||recTime||'09:00';
-      if (recTime){ const it=itemsArr.find(x=>x.id===itemId); time=clampTime(time,recTime,it?(it.timeSpan||180):180); }
+      let time=(stepper&&stepper.dataset.time)||recTime||'09:00';   // no clamp — any time allowed
       if (isOn){
         const item=itemsArr.find(x=>x.id===itemId); if (!item) return;
         if (recId){
