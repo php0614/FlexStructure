@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flex Structure</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --ink: #111;
+    --ink2: #555;
+    --ink3: #999;
+    --line: #e5e5e5;
+    --blue: #3b82f6;
+    --green: #16a34a;
+    --red: #dc2626;
+    --amber: #d97706;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, "Noto Sans KR", sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ---------- Top bar ---------- */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  header .spacer { flex: 1; }
+  #statusBar { font-size: 12px; color: var(--ink3); }
+  #statusBar.ok { color: var(--green); }
+  #statusBar.error { color: var(--red); }
+  #statusBar.info { color: var(--blue); }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  button:hover { background: #f5f5f5; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  #btnAdd { padding: 3px 11px; font-size: 16px; line-height: 1.3; border-radius: 7px; }
+  button.primary:hover { background: #2563eb; }
+  button.danger { color: var(--red); border-color: #fecaca; }
+  button.start {
+    background: var(--green); border-color: var(--green); color: #fff;
+    padding: 4px 12px; font-size: 12px; border-radius: 6px;
+  }
+  button.start:hover { background: #15803d; }
+
+  /* ---------- Start banner ---------- */
+  #banner {
+    display: none;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    margin: 12px 16px 0;
+    border-radius: 12px;
+    padding: 14px 18px;
+    text-align: center;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  #banner.show { display: block; }
+  #banner .msg { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+  #banner .msg .delta { color: var(--green); }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.25); }
+    50%      { box-shadow: 0 0 0 8px rgba(22,163,74,0); }
+  }
+
+  /* ---------- Layout ---------- */
+  main {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  @media (min-width: 1100px) {
+    main { grid-template-columns: 320px 1fr 330px; align-items: start; }
+  }
+
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  section.panel h2 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--ink2);
+    margin-bottom: 12px;
+  }
+
+  /* ---------- Weeks ---------- */
+  .week-label { font-size: 11px; color: var(--ink3); margin: 10px 0 4px; }
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .dow {
+    text-align: center; font-size: 10px; color: var(--ink3); padding-bottom: 2px;
+  }
+  .day-cell {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 2px 4px;
+    text-align: center;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .day-cell:hover { background: #f5f5f5; }
+  .day-cell .num { font-size: 13px; }
+  .day-cell.other-month .num { color: var(--ink3); }
+  .day-cell.today { border-color: var(--blue); }
+  .day-cell.today .num { color: var(--blue); font-weight: 700; }
+  .day-cell.selected { background: #eff6ff; }
+  .day-cell .dots { display: flex; justify-content: center; gap: 2px; margin-top: 3px; flex-wrap: wrap; }
+  .day-cell .dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ---------- Day / pie ---------- */
+  #dayTitle { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  #pieWrap { display: flex; justify-content: center; }
+  #pieWrap svg { max-width: 360px; width: 100%; height: auto; }
+
+  table.sched {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-size: 13px;
+  }
+  table.sched th {
+    text-align: left;
+    font-size: 11px;
+    color: var(--ink3);
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+    padding: 6px 6px;
+  }
+  table.sched td {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 8px 6px;
+    vertical-align: middle;
+  }
+  table.sched tr.done td { color: var(--ink3); }
+  table.sched tr.done .name { text-decoration: line-through; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: 0; }
+  .time-main { font-weight: 600; white-space: nowrap; }
+  .time-orig { font-size: 11px; color: var(--ink3); text-decoration: line-through; white-space: nowrap; }
+  .flex-note { font-size: 11px; color: var(--ink3); white-space: nowrap; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  }
+  .badge.upcoming { background: #f5f5f5; color: var(--ink2); }
+  .badge.window  { background: #dcfce7; color: var(--green); }
+  .badge.running { background: #dbeafe; color: var(--blue); }
+  .badge.done    { background: #f5f5f5; color: var(--ink3); }
+  .badge.missed  { background: #fee2e2; color: var(--red); }
+  .edit-link { font-size: 12px; color: var(--ink3); cursor: pointer; border: none; background: none; padding: 2px 4px; }
+  .edit-link:hover { color: var(--blue); background: none; }
+  .empty-note { color: var(--ink3); font-size: 13px; text-align: center; padding: 18px 0; }
+
+  /* ---------- Timer ---------- */
+  #timerPanel { text-align: center; }
+  #timerWrap svg { max-width: 288px; width: 100%; height: auto; }
+  #timerName { font-size: 15px; font-weight: 600; margin-top: 6px; min-height: 20px; }
+  #timerSub { font-size: 12px; color: var(--ink3); margin: 4px 0 10px; min-height: 16px; }
+  #timerName:empty { min-height: 0; margin: 0; }
+  #timerSub:empty { min-height: 0; margin: 0; }
+
+  /* ---------- Modal ---------- */
+  .modal-bg {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 100;
+    align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 14px;
+    padding: 22px;
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h3 { font-size: 16px; margin-bottom: 16px; }
+  .modal label { display: block; font-size: 12px; color: var(--ink2); margin: 12px 0 4px; }
+  .modal input[type=text], .modal input[type=time], .modal input[type=number], .modal select {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .days-row { display: flex; gap: 4px; }
+  .days-row label.day-chk {
+    flex: 1; text-align: center; font-size: 12px; margin: 0;
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 0;
+    cursor: pointer; color: var(--ink2); user-select: none;
+  }
+  .days-row label.day-chk input { display: none; }
+  .days-row label.day-chk.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .color-row { display: flex; gap: 6px; margin-top: 4px; }
+  .color-row .c {
+    width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 2px solid transparent;
+  }
+  .color-row .c.on { border-color: var(--ink); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+  .set-divider {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--ink3); border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px;
+  }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+  .switch-row .lbl { font-size: 12px; color: var(--ink2); }
+  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .switch input { display: none; }
+  .switch .knob {
+    position: absolute; inset: 0; background: #ddd; border-radius: 12px;
+    cursor: pointer; transition: background 0.2s; display: block;
+  }
+  .switch .knob::after {
+    content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; transition: left 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .switch input:checked + .knob { background: var(--green); }
+  .switch input:checked + .knob::after { left: 21px; }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff;
+    font-size: 13px; padding: 9px 18px; border-radius: 10px;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 200;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { background: var(--red); }
+  #toast.ok { background: var(--green); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Flex Structure</h1>
+  <span id="statusBar"></span>
+  <span class="spacer"></span>
+  <button id="btnAdd" class="primary" title="Add schedule">+</button>
+  <button id="btnSettings" title="Settings">&#9881;</button>
+  <button id="btnSave">Save</button>
+  <button id="btnReload">Reload</button>
+</header>
+
+<div id="banner">
+  <div class="msg" id="bannerMsg"></div>
+  <button class="start" id="bannerStart">Start</button>
+</div>
+
+<main>
+  <!-- ---------- Timer ---------- -->
+  <section class="panel" id="timerPanel">
+    <h2>Timer</h2>
+    <div id="timerWrap"></div>
+    <div id="timerName"></div>
+    <div id="timerSub"></div>
+    <button id="btnFinish" style="display:none">Finish now</button>
+  </section>
+
+  <!-- ---------- Day ---------- -->
+  <section class="panel" id="dayPanel">
+    <h2>Day</h2>
+    <div id="dayTitle"></div>
+    <div id="pieWrap"></div>
+    <table class="sched">
+      <thead>
+        <tr><th>Time</th><th>Schedule</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
+      </thead>
+      <tbody id="schedBody"></tbody>
+    </table>
+    <div class="empty-note" id="emptyNote" style="display:none">No schedules for this day. Click “+” to add one.</div>
+  </section>
+
+  <!-- ---------- Weeks ---------- -->
+  <section class="panel" id="weeksPanel">
+    <h2>Weeks</h2>
+    <div id="weeksBody"></div>
+  </section>
+</main>
+
+<!-- ---------- Schedule editor ---------- -->
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <h3 id="editTitle">New Schedule</h3>
+    <label>Name</label>
+    <input type="text" id="f-name" placeholder="e.g. Lunch, Practice, Workout">
+    <label>Scheduled time</label>
+    <input type="time" id="f-time" value="12:30">
+    <label>Duration (minutes)</label>
+    <input type="number" id="f-dur" min="5" max="720" step="5" value="60">
+    <label>Flex Window — can start &plusmn; this many minutes around the scheduled time</label>
+    <input type="number" id="f-flex" min="0" max="120" step="5" value="15">
+    <label>Days</label>
+    <div class="days-row" id="f-days"></div>
+    <label>Range — repeat only between these dates (optional, e.g. 6.12-7.8)</label>
+    <input type="text" id="f-range" placeholder="6.12-7.8">
+    <label>Excluded days — skip these dates (optional, e.g. 7.19, 7.26)</label>
+    <input type="text" id="f-excl" placeholder="7.19, 7.26">
+    <label>Color</label>
+    <div class="color-row" id="f-colors"></div>
+    <div class="modal-actions">
+      <button class="danger" id="f-delete" style="margin-right:auto">Delete</button>
+      <button id="f-cancel">Cancel</button>
+      <button class="primary" id="f-ok">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- Settings ---------- -->
+<div class="modal-bg" id="setModal">
+  <div class="modal">
+    <h3>Settings</h3>
+    <label>Default Flex Window for new schedules (&plusmn; minutes)</label>
+    <input type="number" id="s-flex" min="0" max="120" step="5">
+
+    <div class="set-divider">Google Calendar</div>
+    <label>OAuth Client ID (Google Cloud Console &rarr; Credentials)</label>
+    <input type="text" id="s-gcid" placeholder="123456789-abc.apps.googleusercontent.com">
+    <label>Calendar — name (e.g. Daily), calendar ID, or 'primary'</label>
+    <input type="text" id="s-gcal" placeholder="primary">
+    <div class="switch-row">
+      <span class="lbl">Auto Sync to Google Calendar on startup</span>
+      <label class="switch"><input type="checkbox" id="s-auto"><span class="knob"></span></label>
+    </div>
+    <button id="s-sync" style="width:100%;margin-top:14px">Sync Now</button>
+
+    <div class="modal-actions">
+      <button id="s-cancel">Cancel</button>
+      <button class="primary" id="s-ok">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+//  Cloud storage — same Supabase project/bucket as Stock Monitor,
+//  dedicated CSV file for this app.
+// ============================================================
+const SUPABASE_URL = 'https://upqnxyllnenivehmallp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_o7KDz58nXdjLN7TwOw2Xhg_VBWzOccH';
+const BUCKET       = 'csv-data';
+const DATA_FILE    = 'flex_structure_data.csv';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Day dial covers 10 AM – 10 PM (12 hours)
+const DIAL_START = 10 * 60;
+const DIAL_END   = 22 * 60;
+
+// red is reserved for "started within the Flex Window", black for "not started in time"
+const PALETTE = ['#3b82f6','#16a34a','#d97706','#8b5cf6','#0d9488','#db2777','#64748b'];
+const COLOR_ONTIME = '#dc2626';
+const COLOR_MISSED = '#111111';
+const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const KDOW_SHORT = ['일','월','화','수','목','금','토'];
+const KDOW_FULL  = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
+
+// ============================================================
+//  State
+// ============================================================
+let state = {
+  settings:  { defaultFlex: 15 },
+  schedules: [],          // {id, name, time:'HH:MM', dur, flex, days:[0..6], color}
+  dayStates: {},          // 'YYYY-MM-DD' -> { runs: { schedId: {start:epochMs, done:bool} } }
+};
+let selectedDate = todayStr();
+let editingId = null;
+let saveTimer = null;
+
+const $  = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+
+// ============================================================
+//  Helpers
+// ============================================================
+function pad2(n){ return String(n).padStart(2,'0'); }
+function todayStr(){ return dateStr(new Date()); }
+function dateStr(d){ return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()); }
+function parseDate(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function timeToMin(t){ const [h,m] = t.split(':').map(Number); return h*60+m; }
+function nowMin(){ const n = new Date(); return n.getHours()*60 + n.getMinutes() + n.getSeconds()/60; }
+function fmtMin(min){
+  min = ((Math.round(min) % 1440) + 1440) % 1440;
+  let h = Math.floor(min/60), m = min%60;
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return h + ':' + pad2(m) + ' ' + ap;
+}
+function uid(){ return 's' + Math.random().toString(36).slice(2,9); }
+function dayState(ds){
+  if (!state.dayStates[ds]) state.dayStates[ds] = { runs:{} };
+  if (!state.dayStates[ds].runs) state.dayStates[ds].runs = {};
+  return state.dayStates[ds];
+}
+
+function setStatus(text, kind=''){
+  const el = $('#statusBar');
+  el.textContent = text;
+  el.className = kind;
+}
+function toast(msg, kind=''){
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'show ' + kind;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 2600);
+}
+
+// ============================================================
+//  Occurrence test — weekday repeat narrowed by an optional
+//  'M.D-M.D' range and 'M.D, M.D' excluded-day list
+// ============================================================
+function occursOn(s, d){
+  if (!s.days.includes(d.getDay())) return false;
+  if (s.range){
+    const m = s.range.match(/^\s*(\d{1,2})\.(\d{1,2})\s*-\s*(\d{1,2})\.(\d{1,2})\s*$/);
+    if (m){
+      const y = d.getFullYear();
+      const st = new Date(y, +m[1]-1, +m[2]);
+      const en = new Date(y, +m[3]-1, +m[4]);
+      const ok = en < st ? (d >= st || d <= en)   // range crosses the year boundary
+                         : (d >= st && d <= en);
+      if (!ok) return false;
+    }
+  }
+  if (s.excl){
+    const key = (d.getMonth()+1) + '.' + d.getDate();
+    if (s.excl.split(',').map(x => x.trim()).includes(key)) return false;
+  }
+  return true;
+}
+
+// ============================================================
+//  Core: effective times with flexible cascade
+//  At day start every schedule sits on its set time. When one is
+//  started off-time, the delta cascades into every later schedule.
+// ============================================================
+function computeDay(ds){
+  const dObj = parseDate(ds);
+  const runs = (state.dayStates[ds] && state.dayStates[ds].runs) || {};
+  const list = state.schedules
+    .filter(s => occursOn(s, dObj))
+    .slice()
+    .sort((a,b) => timeToMin(a.time) - timeToMin(b.time));
+
+  const isToday = ds === todayStr();
+  const now = nowMin();
+  let offset = 0;
+  const out = [];
+
+  for (const s of list){
+    const base = timeToMin(s.time);
+    let eff = base + offset;
+    const run = runs[s.id];
+    let startMin = null, status;
+
+    let startedInWindow = false;
+    if (run){
+      const st = new Date(run.start);
+      startMin = st.getHours()*60 + st.getMinutes() + st.getSeconds()/60;
+      startedInWindow = Math.abs(startMin - eff) <= s.flex;  // vs pre-start effective time
+      offset += Math.round(startMin - eff);   // cascade into later schedules
+      eff = startMin;
+      const elapsed = (Date.now() - run.start) / 60000;
+      if (run.done || elapsed >= s.dur) status = 'done';
+      else status = 'running';
+    } else if (!isToday){
+      status = parseDate(ds) < parseDate(todayStr()) ? 'missed' : 'upcoming';
+    } else if (now < eff - s.flex){
+      status = 'upcoming';
+    } else if (now <= eff + s.flex){
+      status = 'window';
+    } else {
+      status = 'missed';
+    }
+    // display color: red = started inside the Flex Window, black = not started in time
+    let dispColor = s.color;
+    if (run)                        dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
+    else if (status === 'missed')   dispColor = COLOR_MISSED;
+    out.push({ s, base, eff, run, startMin, status, dispColor });
+  }
+  return out;
+}
+
+function runningEntry(){
+  return computeDay(todayStr()).find(e => e.status === 'running') || null;
+}
+
+// ============================================================
+//  Start / finish
+// ============================================================
+function startSchedule(id){
+  const ds = dayState(todayStr());
+  if (ds.runs[id]) return;
+  ds.runs[id] = { start: Date.now(), done: false };
+  const s = state.schedules.find(x => x.id === id);
+  toast('Started: ' + (s ? s.name : ''), 'ok');
+  scheduleSave();
+  renderAll();
+}
+function finishSchedule(id){
+  const ds = dayState(todayStr());
+  if (ds.runs[id]) ds.runs[id].done = true;
+  scheduleSave();
+  renderAll();
+}
+
+// ============================================================
+//  Rendering — Weeks
+// ============================================================
+function renderWeeks(){
+  const today = parseDate(todayStr());
+  const thisSun = addDays(today, -today.getDay());
+  const labels = ['Last week', 'This week', 'Next week', 'In two weeks'];
+  let html = '<div class="week-grid">' + KDOW_SHORT.map(d => `<div class="dow">${d}</div>`).join('') + '</div>';
+
+  for (let w = -1; w <= 2; w++){
+    html += `<div class="week-label">${labels[w+1]}</div><div class="week-grid">`;
+    for (let i = 0; i < 7; i++){
+      const d = addDays(thisSun, w*7 + i);
+      const ds = dateStr(d);
+      const cls = ['day-cell'];
+      if (ds === todayStr()) cls.push('today');
+      if (ds === selectedDate) cls.push('selected');
+      if (d.getMonth() !== today.getMonth()) cls.push('other-month');
+      const dots = state.schedules
+        .filter(s => occursOn(s, d))
+        .slice(0, 6)
+        .map(s => `<span class="dot" style="background:${s.color}"></span>`).join('');
+      const showMonth = d.getDate() === 1 || (w === -1 && i === 0);
+      const num = showMonth ? (d.getMonth()+1) + '/' + d.getDate() : d.getDate();
+      html += `<div class="${cls.join(' ')}" data-date="${ds}">
+                 <div class="num">${num}</div><div class="dots">${dots}</div>
+               </div>`;
+    }
+    html += '</div>';
+  }
+  $('#weeksBody').innerHTML = html;
+  $$('#weeksBody .day-cell').forEach(el => {
+    el.onclick = () => { selectedDate = el.dataset.date; renderAll(); };
+  });
+}
+
+// ============================================================
+//  Rendering — Day pie
+// ============================================================
+function polar(cx, cy, r, min){
+  // map [DIAL_START, DIAL_END] onto a full circle, 12 PM (noon) at top
+  const frac = (min - 12 * 60) / (DIAL_END - DIAL_START);
+  const ang = frac * 2 * Math.PI - Math.PI / 2;
+  return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)];
+}
+function wedgePath(cx, cy, r, m0, m1){
+  m0 = Math.max(m0, DIAL_START); m1 = Math.min(m1, DIAL_END);
+  if (m1 <= m0) return '';
+  const [x0,y0] = polar(cx,cy,r,m0);
+  const [x1,y1] = polar(cx,cy,r,m1);
+  const large = (m1 - m0) / (DIAL_END - DIAL_START) > 0.5 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`;
+}
+function renderPie(entries){
+  const C = 180, R = 150;
+  let svg = `<svg viewBox="0 0 360 360">`;
+  svg += `<circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
+
+  // schedule wedges
+  for (const e of entries){
+    const op = e.status === 'done' ? 0.4 : e.status === 'missed' ? 0.3 : 0.55;
+    const m0 = Math.max(e.eff, DIAL_START), m1 = Math.min(e.eff + e.s.dur, DIAL_END);
+    const p = wedgePath(C, C, R, e.eff, e.eff + e.s.dur);
+    if (p) svg += `<path d="${p}" fill="${e.dispColor}" opacity="${op}"/>`;
+    // name label inside the wedge — length budget grows with duration
+    if (m1 > m0){
+      const maxLen = e.s.dur <= 15 ? 2 : e.s.dur <= 30 ? 5 : e.s.dur <= 60 ? 8 : 12;
+      const label = e.s.name.slice(0, maxLen);
+      const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
+      const tOp = (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
+      svg += `<text x="${tx}" y="${ty}" font-size="10" fill="#333" opacity="${tOp}" text-anchor="middle" dominant-baseline="middle">${label.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
+    }
+    // flex window arc band at rim
+    if (e.status === 'upcoming' || e.status === 'window'){
+      const f0 = Math.max(e.eff - e.s.flex, DIAL_START), f1 = Math.min(e.eff + e.s.flex, DIAL_END);
+      if (f1 > f0){
+        const [ax,ay] = polar(C,C,R+5,f0), [bx,by] = polar(C,C,R+5,f1);
+        const large = (f1-f0)/(DIAL_END-DIAL_START) > 0.5 ? 1 : 0;
+        svg += `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
+      }
+    }
+  }
+
+  // hour ticks + labels
+  for (let h = 10; h < 22; h++){
+    const m = h*60;
+    const [x0,y0] = polar(C,C,R-6,m);
+    const [x1,y1] = polar(C,C,R,m);
+    svg += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#bbb" stroke-width="1.5"/>`;
+    const [lx,ly] = polar(C,C,R-20,m);
+    const lab = h === 12 ? '12P' : (h > 12 ? (h-12) : h);
+    svg += `<text x="${lx}" y="${ly}" font-size="12" fill="#999" text-anchor="middle" dominant-baseline="middle">${lab}</text>`;
+  }
+
+  // now hand (today only, inside dial range)
+  if (selectedDate === todayStr()){
+    const nm = nowMin();
+    if (nm >= DIAL_START && nm <= DIAL_END){
+      const [hx,hy] = polar(C,C,R-12,nm);
+      svg += `<line x1="${C}" y1="${C}" x2="${hx}" y2="${hy}" stroke="#111" stroke-width="2"/>`;
+    }
+  }
+  svg += `<circle cx="${C}" cy="${C}" r="4" fill="#111"/>`;
+  svg += `</svg>`;
+  $('#pieWrap').innerHTML = svg;
+}
+
+// ============================================================
+//  Rendering — Day list
+// ============================================================
+const BADGE_TEXT = { upcoming:'Upcoming', window:'Start now', running:'Running', done:'Done', missed:'Missed' };
+
+function renderDayList(entries){
+  const d = parseDate(selectedDate);
+  $('#dayTitle').textContent =
+    KDOW_FULL[d.getDay()] + ', ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일, ' + d.getFullYear() +
+    (selectedDate === todayStr() ? ' (오늘)' : '');
+
+  const body = $('#schedBody');
+  $('#emptyNote').style.display = entries.length ? 'none' : 'block';
+  body.innerHTML = entries.map(e => {
+    const shifted = Math.round(e.eff) !== e.base && !e.run;
+    const timeCell =
+      `<div class="time-main">${fmtMin(e.eff)}</div>` +
+      (shifted ? `<div class="time-orig">${fmtMin(e.base)}</div>` : '') +
+      (e.run ? '' : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`);
+    const canStart = selectedDate === todayStr() && !e.run && (e.status === 'window' || e.status === 'missed');
+    const action = canStart
+      ? `<button class="start" data-start="${e.s.id}">Start</button>`
+      : (e.status === 'running' ? `<button data-finish="${e.s.id}" style="font-size:12px;padding:4px 10px">Finish</button>` : '');
+    return `<tr class="${e.status}">
+      <td>${timeCell}</td>
+      <td class="name"><span class="swatch" style="background:${e.dispColor}"></span>${e.s.name}</td>
+      <td>${e.s.dur}m</td>
+      <td><span class="badge ${e.status}">${BADGE_TEXT[e.status]}</span></td>
+      <td>${action}</td>
+      <td><button class="edit-link" data-edit="${e.s.id}">Edit</button></td>
+    </tr>`;
+  }).join('');
+
+  body.querySelectorAll('[data-start]').forEach(b => b.onclick = () => startSchedule(b.dataset.start));
+  body.querySelectorAll('[data-finish]').forEach(b => b.onclick = () => finishSchedule(b.dataset.finish));
+  body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
+}
+
+// ============================================================
+//  Rendering — Banner
+// ============================================================
+function renderBanner(){
+  const entries = computeDay(todayStr());
+  const e = entries.find(x => x.status === 'window');
+  const banner = $('#banner');
+  if (!e){ banner.classList.remove('show'); return; }
+  const diff = Math.round(e.eff - nowMin());
+  const deltaTxt = diff >= 0 ? '&minus;' + diff + ' min.' : '+' + (-diff) + ' min.';
+  $('#bannerMsg').innerHTML = `Now, <span class="delta">${deltaTxt}</span> of <b>${e.s.name}</b>. Start?`;
+  $('#bannerStart').onclick = () => startSchedule(e.s.id);
+  banner.classList.add('show');
+}
+
+// ============================================================
+//  Rendering — Time-Timer style countdown
+// ============================================================
+function renderTimer(){
+  const e = runningEntry();
+  const C = 120, R = 100;
+  let svg = `<svg viewBox="0 0 240 240">`;
+  svg += `<circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="2"/>`;
+
+  // minute ticks (like a Time Timer face)
+  for (let i = 0; i < 12; i++){
+    const ang = i / 12 * 2 * Math.PI - Math.PI / 2;
+    const x0 = C + (R-7) * Math.cos(ang), y0 = C + (R-7) * Math.sin(ang);
+    const x1 = C + R * Math.cos(ang),     y1 = C + R * Math.sin(ang);
+    svg += `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#ccc" stroke-width="2"/>`;
+  }
+
+  let center = '', name = '', sub = '';
+  if (e){
+    const elapsedMs = Date.now() - e.run.start;
+    const remMs = Math.max(0, e.s.dur * 60000 - elapsedMs);
+    const frac = remMs / (e.s.dur * 60000);
+    // remaining sector, shrinking clockwise from the top
+    if (frac > 0.001){
+      const ang = frac * 2 * Math.PI - Math.PI / 2;
+      const x = C + (R-3) * Math.cos(ang), y = C + (R-3) * Math.sin(ang);
+      const large = frac > 0.5 ? 1 : 0;
+      svg += `<path d="M ${C} ${C} L ${C} ${C-(R-3)} A ${R-3} ${R-3} 0 ${large} 1 ${x} ${y} Z" fill="#dc2626" opacity="0.85"/>`;
+    }
+    const remMin = Math.floor(remMs / 60000);
+    const remSec = Math.floor((remMs % 60000) / 1000);
+    const halo = 'paint-order:stroke;stroke:#ffffff;stroke-width:5px';
+    center = `<text x="${C}" y="${C-4}" font-size="40" font-weight="700" fill="#111" text-anchor="middle" style="${halo}">${remMin}</text>
+              <text x="${C}" y="${C+22}" font-size="14" fill="#111" text-anchor="middle" style="${halo}">${pad2(remSec)} s</text>`;
+    name = e.s.name;
+    sub = 'Started ' + fmtMin(e.startMin) + ' · ends ' + fmtMin(e.startMin + e.s.dur);
+    $('#btnFinish').style.display = '';
+    $('#btnFinish').onclick = () => finishSchedule(e.s.id);
+  } else {
+    center = `<text x="${C}" y="${C+6}" font-size="15" fill="#bbb" text-anchor="middle">No schedule running</text>`;
+    name = '';
+    const next = computeDay(todayStr()).find(x => x.status === 'upcoming' || x.status === 'window');
+    sub = next ? 'Next: ' + next.s.name + ' at ' + fmtMin(next.eff) + ' (±' + next.s.flex + 'm)' : '';
+    $('#btnFinish').style.display = 'none';
+  }
+  svg += center + `</svg>`;
+  $('#timerWrap').innerHTML = svg;
+  $('#timerName').textContent = name;
+  $('#timerSub').textContent = sub;
+}
+
+// ============================================================
+//  Rendering — all
+// ============================================================
+function renderAll(){
+  renderWeeks();
+  const entries = computeDay(selectedDate);
+  renderPie(entries);
+  renderDayList(entries);
+  renderBanner();
+  renderTimer();
+}
+
+// ============================================================
+//  Tick — auto-complete runs, refresh visuals
+// ============================================================
+let lastStatusSig = '';
+setInterval(() => {
+  const e = runningEntry();
+  // auto-mark done when countdown hits zero
+  const todayRuns = (state.dayStates[todayStr()] || {}).runs || {};
+  for (const s of state.schedules){
+    const run = todayRuns[s.id];
+    if (run && !run.done && Date.now() - run.start >= s.dur * 60000){
+      run.done = true;
+      toast('Finished: ' + s.name, 'ok');
+      scheduleSave();
+    }
+  }
+  renderTimer();
+  // re-render the rest only when a status changes (cheap signature)
+  const sig = computeDay(todayStr()).map(x => x.status).join() + selectedDate;
+  if (sig !== lastStatusSig){
+    lastStatusSig = sig;
+    renderWeeks();
+    const entries = computeDay(selectedDate);
+    renderPie(entries);
+    renderDayList(entries);
+  }
+  renderBanner();
+}, 1000);
+
+// ============================================================
+//  Editor modal
+// ============================================================
+function buildDayChecks(days){
+  $('#f-days').innerHTML = DOW_NAMES.map((n,i) =>
+    `<label class="day-chk ${days.includes(i) ? 'on' : ''}" data-d="${i}">
+       <input type="checkbox" ${days.includes(i) ? 'checked' : ''}>${n}
+     </label>`).join('');
+  $$('#f-days .day-chk').forEach(el => {
+    el.onclick = (ev) => { ev.preventDefault(); el.classList.toggle('on'); };
+  });
+}
+function buildColors(sel){
+  $('#f-colors').innerHTML = PALETTE.map(c =>
+    `<div class="c ${c === sel ? 'on' : ''}" data-c="${c}" style="background:${c}"></div>`).join('');
+  $$('#f-colors .c').forEach(el => {
+    el.onclick = () => {
+      $$('#f-colors .c').forEach(x => x.classList.remove('on'));
+      el.classList.add('on');
+    };
+  });
+}
+function openEditor(id){
+  editingId = id || null;
+  const s = id ? state.schedules.find(x => x.id === id) : null;
+  $('#editTitle').textContent = s ? 'Edit Schedule' : 'New Schedule';
+  $('#f-name').value = s ? s.name : '';
+  $('#f-time').value = s ? s.time : '12:30';
+  $('#f-dur').value  = s ? s.dur  : 60;
+  $('#f-flex').value = s ? s.flex : state.settings.defaultFlex;
+  $('#f-range').value = (s && s.range) || '';
+  $('#f-excl').value  = (s && s.excl)  || '';
+  buildDayChecks(s ? s.days : [0,1,2,3,4,5,6]);
+  buildColors(s ? s.color : PALETTE[state.schedules.length % PALETTE.length]);
+  $('#f-delete').style.display = s ? '' : 'none';
+  $('#editModal').classList.add('show');
+}
+function closeEditor(){ $('#editModal').classList.remove('show'); }
+
+$('#btnAdd').onclick = () => openEditor(null);
+$('#f-cancel').onclick = closeEditor;
+$('#f-delete').onclick = () => {
+  if (!editingId) return;
+  if (!confirm('Delete this schedule?')) return;
+  const victim = state.schedules.find(s => s.id === editingId);
+  if (victim && victim.gcalId){
+    (state.gcalTrash = state.gcalTrash || []).push(victim.gcalId);  // delete from Google on next sync
+  }
+  state.schedules = state.schedules.filter(s => s.id !== editingId);
+  closeEditor(); scheduleSave(); renderAll();
+};
+$('#f-ok').onclick = () => {
+  const name = $('#f-name').value.trim();
+  if (!name){ toast('Enter a name', 'error'); return; }
+  const days = [...$$('#f-days .day-chk')].filter(el => el.classList.contains('on')).map(el => +el.dataset.d);
+  if (!days.length){ toast('Pick at least one day', 'error'); return; }
+  const range = $('#f-range').value.trim();
+  if (range && !/^\d{1,2}\.\d{1,2}\s*-\s*\d{1,2}\.\d{1,2}$/.test(range)){
+    toast('Range format: 6.12-7.8', 'error'); return;
+  }
+  const excl = $('#f-excl').value.trim();
+  if (excl && !/^\d{1,2}\.\d{1,2}(\s*,\s*\d{1,2}\.\d{1,2})*$/.test(excl)){
+    toast('Excluded days format: 7.19, 7.26', 'error'); return;
+  }
+  const colorEl = $('#f-colors .c.on');
+  const prev = editingId ? state.schedules.find(s => s.id === editingId) : null;
+  const obj = {
+    id:   editingId || uid(),
+    gcalId: prev ? prev.gcalId : undefined,   // keep the Google event link across edits
+    name,
+    time: $('#f-time').value || '12:00',
+    dur:  Math.max(5, +$('#f-dur').value || 60),
+    flex: Math.max(0, +$('#f-flex').value || 0),
+    days,
+    range,
+    excl,
+    color: colorEl ? colorEl.dataset.c : PALETTE[0],
+  };
+  const i = state.schedules.findIndex(s => s.id === obj.id);
+  if (i >= 0) state.schedules[i] = obj; else state.schedules.push(obj);
+  closeEditor(); scheduleSave(); renderAll();
+};
+
+// ---------- Settings modal ----------
+$('#btnSettings').onclick = () => {
+  $('#s-flex').value = state.settings.defaultFlex;
+  $('#s-gcid').value = state.settings.gcalClientId || '';
+  $('#s-gcal').value = state.settings.gcalCalendarId || 'primary';
+  $('#s-auto').checked = !!state.settings.autoSync;
+  $('#setModal').classList.add('show');
+};
+$('#s-cancel').onclick = () => $('#setModal').classList.remove('show');
+function applySettingsFields(){
+  state.settings.defaultFlex    = Math.max(0, +$('#s-flex').value || 15);
+  state.settings.gcalClientId   = $('#s-gcid').value.trim();
+  state.settings.gcalCalendarId = $('#s-gcal').value.trim() || 'primary';
+  state.settings.autoSync       = $('#s-auto').checked;
+}
+$('#s-ok').onclick = () => {
+  applySettingsFields();
+  $('#setModal').classList.remove('show');
+  scheduleSave();
+};
+$('#s-sync').onclick = () => {
+  applySettingsFields();
+  scheduleSave();
+  syncToGoogle();
+};
+
+// ============================================================
+//  Google Calendar sync
+//  Each schedule is pushed as one recurring event: weekly RRULE
+//  from its weekdays, UNTIL from its Range, EXDATE from its
+//  Excluded days. The created event id is stored on the schedule
+//  (saved to the CSV) so re-syncs update instead of duplicate.
+// ============================================================
+const BYDAY = ['SU','MO','TU','WE','TH','FR','SA'];
+let gToken = null, gTokenExp = 0;
+
+function loadGIS(){
+  return new Promise((res, rej) => {
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) return res();
+    const sc = document.createElement('script');
+    sc.src = 'https://accounts.google.com/gsi/client';
+    sc.onload = res;
+    sc.onerror = () => rej(new Error('Could not load the Google Identity script'));
+    document.head.appendChild(sc);
+  });
+}
+async function getGoogleToken(){
+  if (gToken && Date.now() < gTokenExp - 60000) return gToken;
+  await loadGIS();
+  return new Promise((res, rej) => {
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id: state.settings.gcalClientId,
+      scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+      callback: (resp) => {
+        if (resp.error) return rej(new Error(resp.error));
+        gToken = resp.access_token;
+        gTokenExp = Date.now() + (resp.expires_in || 3600) * 1000;
+        res(gToken);
+      },
+      error_callback: (err) => rej(new Error(err.type || 'Authorization failed')),
+    });
+    tc.requestAccessToken({ prompt: '' });
+  });
+}
+
+function resolveRange(s){
+  if (!s.range) return null;
+  const m = s.range.match(/^\s*(\d{1,2})\.(\d{1,2})\s*-\s*(\d{1,2})\.(\d{1,2})\s*$/);
+  if (!m) return null;
+  const y = new Date().getFullYear();
+  let st = new Date(y, +m[1]-1, +m[2]);
+  let en = new Date(y, +m[3]-1, +m[4]);
+  if (en < st) en = new Date(y+1, +m[3]-1, +m[4]);
+  return { st, en };
+}
+function firstOccurrence(s){
+  const range = resolveRange(s);
+  let d = range ? new Date(range.st) : parseDate(todayStr());
+  for (let i = 0; i < 7; i++){
+    if (s.days.includes(d.getDay())) return d;
+    d = addDays(d, 1);
+  }
+  return null;
+}
+function localDT(d){  // 'YYYY-MM-DDTHH:MM:SS' in local time
+  return dateStr(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':00';
+}
+function buildEvent(s){
+  const d0 = firstOccurrence(s);
+  if (!d0) return null;
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const startD = new Date(d0); startD.setMinutes(timeToMin(s.time));
+  const endD   = new Date(startD.getTime() + s.dur * 60000);
+
+  let rrule = 'RRULE:FREQ=WEEKLY;BYDAY=' + s.days.map(i => BYDAY[i]).join(',');
+  const range = resolveRange(s);
+  if (range){
+    const u = new Date(range.en); u.setHours(23,59,59);
+    rrule += ';UNTIL=' + u.getUTCFullYear() + pad2(u.getUTCMonth()+1) + pad2(u.getUTCDate()) +
+             'T' + pad2(u.getUTCHours()) + pad2(u.getUTCMinutes()) + pad2(u.getUTCSeconds()) + 'Z';
+  }
+  const recurrence = [rrule];
+  if (s.excl){
+    const stamps = s.excl.split(',').map(x => x.trim()).map(t => {
+      const m = t.match(/^(\d{1,2})\.(\d{1,2})$/);
+      if (!m) return null;
+      let ex = new Date(d0.getFullYear(), +m[1]-1, +m[2]);
+      if (ex < d0) ex = new Date(d0.getFullYear()+1, +m[1]-1, +m[2]);
+      ex.setMinutes(timeToMin(s.time));
+      return dateStr(ex).replace(/-/g,'') + 'T' + pad2(ex.getHours()) + pad2(ex.getMinutes()) + '00';
+    }).filter(Boolean);
+    if (stamps.length) recurrence.push('EXDATE;TZID=' + tz + ':' + stamps.join(','));
+  }
+  return {
+    summary: s.name,
+    description: 'Flex Structure schedule (Flex Window ±' + s.flex + ' min)',
+    start: { dateTime: localDT(startD), timeZone: tz },
+    end:   { dateTime: localDT(endD),   timeZone: tz },
+    recurrence,
+    extendedProperties: { private: { flexStructureId: s.id } },
+  };
+}
+
+// Accepts 'primary', a real calendar id, or a calendar *name* (e.g. 'Daily') —
+// names are resolved to ids via the user's calendar list.
+async function resolveCalendarId(token){
+  const want = (state.settings.gcalCalendarId || 'primary').trim();
+  if (want === 'primary' || want.includes('@')) return want;
+  const r = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250', {
+    headers: { 'Authorization': 'Bearer ' + token },
+  });
+  if (!r.ok) throw new Error('Could not read calendar list (HTTP ' + r.status + ')');
+  const items = (await r.json()).items || [];
+  const hit = items.find(c => c.id === want) ||
+              items.find(c => (c.summary || '').toLowerCase() === want.toLowerCase());
+  if (!hit) throw new Error('Calendar "' + want + '" not found — check the name in Settings');
+  return hit.id;
+}
+
+function calBase(calId){
+  return 'https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events';
+}
+function authHeaders(token){
+  return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+}
+async function deleteEvent(token, calId, eventId){
+  const r = await fetch(calBase(calId) + '/' + eventId, { method:'DELETE', headers: authHeaders(token) });
+  // 404/410 = already gone, which is fine
+  if (!r.ok && r.status !== 404 && r.status !== 410) throw new Error('HTTP ' + r.status);
+}
+async function pushSchedule(token, calId, s){
+  const ev = buildEvent(s);
+  if (!ev) return;
+  const base = calBase(calId), headers = authHeaders(token);
+
+  // Reconcile on EVERY sync: find all events tagged with this schedule's id,
+  // keep exactly one (prefer the stored link), delete the rest. This heals
+  // duplicates no matter how they were created.
+  const lookup = await fetch(base + '?maxResults=50&privateExtendedProperty=' +
+                             encodeURIComponent('flexStructureId=' + s.id),
+                             { headers: authHeaders(token) });
+  if (lookup.ok){
+    const items = (await lookup.json()).items || [];
+    const keep = items.find(e => e.id === s.gcalId) || items[0] || null;
+    for (const e of items){
+      if (keep && e.id === keep.id) continue;
+      try { await deleteEvent(token, calId, e.id); } catch(err){ console.warn('Duplicate cleanup failed', err); }
+    }
+    s.gcalId = keep ? keep.id : undefined;
+  }
+
+  if (s.gcalId){
+    const r = await fetch(base + '/' + s.gcalId, { method:'PUT', headers, body: JSON.stringify(ev) });
+    if (r.ok) return;
+    if (r.status !== 404 && r.status !== 410) throw new Error('HTTP ' + r.status);
+    s.gcalId = undefined;   // event was deleted on the calendar — recreate below
+  }
+  const r = await fetch(base, { method:'POST', headers, body: JSON.stringify(ev) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  s.gcalId = (await r.json()).id;
+}
+
+// Remove app-created events whose schedule no longer exists in the app
+// (matched via the description marker + flexStructureId property).
+async function deleteOrphans(token, calId){
+  const liveIds = new Set(state.schedules.map(s => s.id));
+  let removed = 0, pageToken = '';
+  do {
+    const url = calBase(calId) + '?maxResults=250&q=' + encodeURIComponent('Flex Structure schedule') +
+                (pageToken ? '&pageToken=' + pageToken : '');
+    const r = await fetch(url, { headers: authHeaders(token) });
+    if (!r.ok) break;
+    const j = await r.json();
+    for (const ev of (j.items || [])){
+      const fid = ev.extendedProperties && ev.extendedProperties.private &&
+                  ev.extendedProperties.private.flexStructureId;
+      if (fid && !liveIds.has(fid)){
+        try { await deleteEvent(token, calId, ev.id); removed++; }
+        catch(e){ console.warn('Orphan cleanup failed', e); }
+      }
+    }
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return removed;
+}
+
+let syncing = false;
+async function syncToGoogle(){
+  if (syncing) return;
+  if (!state.settings.gcalClientId){
+    toast('Set the Google OAuth Client ID in Settings first', 'error');
+    return;
+  }
+  syncing = true;
+  setStatus('Syncing with Google Calendar…', 'info');
+  try {
+    const token = await getGoogleToken();
+    const calId = await resolveCalendarId(token);
+    let ok = 0, fail = 0;
+    for (const s of state.schedules){
+      try { await pushSchedule(token, calId, s); ok++; }
+      catch (e){ console.error('Sync failed for', s.name, e); fail++; }
+    }
+    // events of schedules deleted in the app
+    let removed = 0;
+    for (const id of (state.gcalTrash || []).slice()){
+      try { await deleteEvent(token, calId, id); removed++; state.gcalTrash.splice(state.gcalTrash.indexOf(id), 1); }
+      catch(e){ console.warn('Trash delete failed', e); }
+    }
+    removed += await deleteOrphans(token, calId);
+    scheduleSave();   // persist new event ids + emptied trash
+    const msg = 'Google Calendar: ' + ok + ' synced' +
+                (removed ? ', ' + removed + ' removed' : '') +
+                (fail ? ', ' + fail + ' failed' : '');
+    setStatus(msg, fail ? 'error' : 'ok');
+    toast(msg, fail ? 'error' : 'ok');
+  } catch (e){
+    console.error(e);
+    setStatus('Google sync failed: ' + e.message, 'error');
+    toast('Google sync failed: ' + e.message, 'error');
+  } finally {
+    syncing = false;
+  }
+}
+$$('.modal-bg').forEach(bg => bg.addEventListener('click', (e) => {
+  if (e.target === bg) bg.classList.remove('show');
+}));
+
+// ============================================================
+//  Cloud save / load  (key-value CSV, JSON payload — same format
+//  convention as stock_pl_settings.csv)
+// ============================================================
+function buildCSV(){
+  // prune day states older than 30 days
+  const cutoff = dateStr(addDays(new Date(), -30));
+  for (const k of Object.keys(state.dayStates)){
+    if (k < cutoff) delete state.dayStates[k];
+  }
+  const json = JSON.stringify({
+    settings:  state.settings,
+    schedules: state.schedules,
+    dayStates: state.dayStates,
+    gcalTrash: state.gcalTrash || [],
+  });
+  return 'key,value\r\ndata,"' + json.replace(/"/g, '""') + '"\r\n';
+}
+function parseCSV(text){
+  const m = text.match(/^data,"([\s\S]*)"\s*$/m);
+  if (!m) throw new Error('Unrecognized CSV format');
+  return JSON.parse(m[1].replace(/""/g, '"'));
+}
+
+async function saveData(){
+  setStatus('Saving…', 'info');
+  setButtonsBusy(true);
+  try {
+    const blob = new Blob([buildCSV()], { type:'text/csv' });
+    const { error } = await sb.storage.from(BUCKET).upload(DATA_FILE, blob, {
+      upsert: true, contentType: 'text/csv',
+    });
+    if (error) throw error;
+    setStatus('Saved ' + new Date().toLocaleTimeString(), 'ok');
+  } catch (e){
+    console.error(e);
+    setStatus('Save failed: ' + e.message, 'error');
+    toast('Save failed: ' + e.message, 'error');
+  } finally {
+    setButtonsBusy(false);
+  }
+}
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveData, 1200);
+}
+
+async function loadData(){
+  setStatus('Loading…', 'info');
+  setButtonsBusy(true);
+  try {
+    const { data: { publicUrl } } = sb.storage.from(BUCKET).getPublicUrl(DATA_FILE);
+    const r = await fetch(publicUrl + '?t=' + Date.now(), {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store' },
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = parseCSV(await r.text());
+    state.settings  = Object.assign({ defaultFlex: 15 }, data.settings);
+    state.schedules = Array.isArray(data.schedules) ? data.schedules : [];
+    state.dayStates = data.dayStates || {};
+    state.gcalTrash = data.gcalTrash || [];
+    setStatus('Loaded', 'ok');
+    if (state.settings.autoSync) syncToGoogle();
+  } catch (e){
+    console.warn('Load failed, starting fresh:', e);
+    setStatus('No cloud data yet — starting fresh', '');
+  } finally {
+    setButtonsBusy(false);
+  }
+  renderAll();
+}
+
+function setButtonsBusy(b){
+  $('#btnSave').disabled = b;
+  $('#btnReload').disabled = b;
+}
+$('#btnSave').onclick = () => { clearTimeout(saveTimer); saveData(); };
+$('#btnReload').onclick = loadData;
+
+// ============================================================
+//  Boot
+// ============================================================
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>
