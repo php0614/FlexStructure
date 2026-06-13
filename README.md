@@ -22,10 +22,11 @@ shown on a Time-Timer-style dial.
 
 ## UI
 
-Responsive: single vertical column on phones (top→bottom: Timer, Day, Weeks, 보조제, 피트니스);
-on wide screens a 3-column desktop layout — left column stacks **Timer / 보조제 복용 관리 /
-피트니스 관리**, the wide center is **Day**, the right is **Weeks**. The green start banner
-always appears at the very top.
+Responsive: single vertical column on phones (top→bottom: Timer, Day — Intelligence, Day — Body,
+Weeks, 보조제, 피트니스); on wide screens a 3-column desktop layout — left column stacks
+**Timer / 보조제 복용 관리 / 피트니스 관리**, the wide center holds the two **Day** panels (side by
+side when there's room, otherwise stacked), the right is **Weeks**. The green start banner always
+appears at the very top.
 
 The header has two add buttons: **+Schedule** (a recurring flexible task — the original editor)
 and **+Health** (assign a 보조제 or 피트니스 item to the currently selected day).
@@ -33,7 +34,8 @@ and **+Health** (assign a 보조제 or 피트니스 item to the currently select
 | Column | Content |
 |---|---|
 | **Timer** (left / top) | Time-Timer-style countdown — a red sector that shrinks as the running task's remaining minutes tick down. "Finish now" ends a task early; tasks auto-complete when the countdown reaches zero. |
-| **Day** (center) | A 12-hour pie dial (10 AM – 10 PM, **12 PM at the top**). Tasks are drawn as colored wedges at their *effective* (shifted) times with the schedule name written inside each wedge (label length scales with duration: ≤15 min → 2 chars, ≤30 → 5, ≤60 → 8, longer → 12), their Flex Window as an arc on the rim, and a black "now" hand. When several schedules bunch up in a short time range their labels would collide, so an automatic de-overlap pass **spreads the names apart vertically** (one up, the next down) — each gets its own readable band, with a faint leader line back to its wedge and a white halo behind the text. Below it, a table lists the day's schedules with time, duration, status and Start/Finish buttons; a **finished** task (schedule or health item) is shown **dimmed/greyed** — its colour changes, it is no longer struck through. Date headings are shown in Korean (e.g. `금요일, 6월 12일, 2026 (오늘)`). |
+| **Day — Intelligence** (center) | A 12-hour pie dial (10 AM – 10 PM, **12 PM at the top**) for **schedules only**. Tasks are drawn as colored wedges at their *effective* (shifted) times with the schedule name written inside each wedge (label length scales with duration: ≤15 min → 2 chars, ≤30 → 5, ≤60 → 8, longer → 12), their Flex Window as an arc on the rim, and a black "now" hand. When several schedules bunch up in a short time range their labels would collide, so an automatic de-overlap pass **spreads the names apart vertically** (one up, the next down) — each gets its own readable band, with a faint leader line back to its wedge and a white halo behind the text. Below it, a table lists the day's schedules with time, duration, status and Start/Finish buttons; a **finished** task is shown **dimmed/greyed** (colour change, not struck through). Date headings are in Korean (e.g. `금요일, 6월 12일, 2026 (오늘)`). |
+| **Day — Body** (center) | The same dial, for **health items only**. **Supplements are a "moment"** — no duration — so each is drawn as a **radial line** at its time (green by default), not an arc. **Fitness** items are arcs (15 min by default, magenta); any fitness items that **overlap each other by ≥1 minute are merged into a single arc labelled `fitness`** — though the underlying items are still listed individually in the table below. Started-on-time → red, missed → black, *Already Passed* → outline/dashed (see below). |
 | **Weeks** (right / bottom) | 3-week calendar — last / this / next week. Colored dots mark which tasks occur on each day (weekday repeat narrowed by Range / Excluded days). Click a day to inspect it. |
 
 Statuses: `Upcoming → Start now (window open) → Running → Done`, or `Missed` if the window
@@ -57,16 +59,18 @@ and it carries a **지남** badge. The Schedule toggle applies to the **currentl
 
 The HealthCare features are merged in. Two catalog panels live on the page:
 
-- **💊 보조제 복용 관리** — a catalog of supplements. Each seeded item carries a recommended
-  time (`recTime`), dose, weekly frequency and a note. **+ 추가** adds a new one (name + icon
-  from a rich SVG icon grid). Right-click / long-press / tap the ⓘ to open the **복용 정보**
-  popup — recommended frequency & time, a recommended ± window (a +/- stepper, 1–6 h, persisted
-  per item, now purely a guideline), the note, and a **delete button** (item removal lives here —
-  there is no longer a separate remove button on the panel).
-- **🏋️ 피트니스 관리** — a catalog of exercises with sets × reps. The info popup shows a 2D
-  **front/back muscle diagram** highlighting the primary (red) and secondary (pink) target
-  muscles, plus muscle tags, a description, and a **delete button** (likewise the only place to
-  remove an exercise — the panel's remove button has been dropped).
+- **💊 보조제 복용 관리** — a catalog of supplements. A supplement is a **moment** (a starting
+  time only, **no duration**) and is **green** by default, shown as a line on the Body dial. Each
+  seeded item carries a recommended time (`recTime`), dose, weekly frequency and a note. **+ 추가**
+  adds a new one (name + icon from a rich SVG icon grid). Right-click / long-press / tap the ⓘ to
+  open the **복용 정보** popup — recommended frequency & time, a recommended ± window (a +/- stepper,
+  1–6 h, persisted per item, now purely a guideline), the note, and a **delete button** (item
+  removal lives here — there is no longer a separate remove button on the panel).
+- **🏋️ 피트니스 관리** — a catalog of exercises with sets × reps, **magenta** by default and a
+  **15-minute** default duration. The info popup shows a 2D **front/back muscle diagram**
+  highlighting the primary (red) and secondary (pink) target muscles, plus muscle tags, a
+  description, and a **delete button** (likewise the only place to remove an exercise — the
+  panel's remove button has been dropped).
 
 **Adding to a day — +Health.** Click **+Health** to open the day editor for the selected day
 (pick a day in Weeks first, otherwise it's today). Toggle any 보조제 / 피트니스 item on and set
@@ -115,7 +119,7 @@ data,"{""settings"":{""defaultFlex"":15},""schedules"":[{""id"":""s1"",""name"":
 - `settings` — default Flex Window plus Google sync settings: `gcalClientId`, `gcalCalendarId`, `autoSync`.
 - `schedules` — task definitions: name, set time, duration (min), Flex Window (± min), weekdays (0=Sun…6=Sat), `range` (`"6.12-7.8"` or empty), `excl` (`"7.19, 7.26"` or empty), color, and `gcalId` once synced to Google Calendar.
 - `dayStates` — per-date run records (`{start, done, passed?}`: actual start timestamp + done flag, plus `passed:true` for items retro-logged via *Already Passed*). Entries older than 30 days are pruned automatically on save.
-- `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, default duration; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded once on first run (`healthSeedVersion`).
+- `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, dur; supplements are moments → `dur 0`, green; fitness → `dur 15`, magenta; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded/migrated by `healthSeedVersion` (v2 applies the moment/colour/duration defaults to existing data).
 - `healthRecords` — health items assigned to specific dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`. These drive the pie, timer and Weeks dots for that day and sync as single-date Google events.
 - Saving is automatic (debounced ~1 s after any change); **Save**/**Reload** buttons force it manually. Loads always cache-bust so every device sees fresh data.
 

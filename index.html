@@ -112,10 +112,18 @@
       align-items: start;
     }
     #timerPanel   { grid-area: timer; }
-    #dayPanel     { grid-area: day; }
+    #daysWrap     { grid-area: day; }
     #weeksPanel   { grid-area: weeks; }
     #suppPanel    { grid-area: supp; }
     #fitnessPanel { grid-area: fit; }
+  }
+
+  /* the two Day panels (Intelligence / Body): side by side when wide enough, else stacked */
+  #daysWrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    align-items: start;
   }
 
   section.panel {
@@ -161,9 +169,9 @@
   .day-cell .dot { width: 5px; height: 5px; border-radius: 50%; }
 
   /* ---------- Day / pie ---------- */
-  #dayTitle { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-  #pieWrap { display: flex; justify-content: center; }
-  #pieWrap svg { max-width: 360px; width: 100%; height: auto; }
+  .day-sub { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .pie-wrap { display: flex; justify-content: center; }
+  .pie-wrap svg { max-width: 360px; width: 100%; height: auto; }
 
   table.sched {
     width: 100%;
@@ -476,19 +484,34 @@
     <button id="btnFinish" style="display:none">Finish now</button>
   </section>
 
-  <!-- ---------- Day ---------- -->
-  <section class="panel" id="dayPanel">
-    <h2>Day</h2>
-    <div id="dayTitle"></div>
-    <div id="pieWrap"></div>
-    <table class="sched">
-      <thead>
-        <tr><th>Time</th><th>Schedule</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
-      </thead>
-      <tbody id="schedBody"></tbody>
-    </table>
-    <div class="empty-note" id="emptyNote" style="display:none">No schedules for this day. Click “+” to add one.</div>
-  </section>
+  <!-- ---------- Day (Intelligence = schedules, Body = health) ---------- -->
+  <div id="daysWrap">
+    <section class="panel" id="dayPanelIntel">
+      <h2>Day &mdash; Intelligence</h2>
+      <div id="dayTitleIntel" class="day-sub"></div>
+      <div id="pieWrapIntel" class="pie-wrap"></div>
+      <table class="sched">
+        <thead>
+          <tr><th>Time</th><th>Schedule</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
+        </thead>
+        <tbody id="schedBodyIntel"></tbody>
+      </table>
+      <div class="empty-note" id="emptyNoteIntel" style="display:none">No schedules for this day. Click “+Schedule” to add one.</div>
+    </section>
+
+    <section class="panel" id="dayPanelBody">
+      <h2>Day &mdash; Body</h2>
+      <div id="dayTitleBody" class="day-sub"></div>
+      <div id="pieWrapBody" class="pie-wrap"></div>
+      <table class="sched">
+        <thead>
+          <tr><th>Time</th><th>Item</th><th>Dur.</th><th>Status</th><th></th><th></th></tr>
+        </thead>
+        <tbody id="schedBodyBody"></tbody>
+      </table>
+      <div class="empty-note" id="emptyNoteBody" style="display:none">No health items for this day. Click “+Health” to add some.</div>
+    </section>
+  </div>
 
   <!-- ---------- Weeks ---------- -->
   <section class="panel" id="weeksPanel">
@@ -662,6 +685,8 @@ const DIAL_END   = 22 * 60;
 const PALETTE = ['#3b82f6','#16a34a','#d97706','#8b5cf6','#0d9488','#db2777','#64748b'];
 const COLOR_ONTIME = '#dc2626';
 const COLOR_MISSED = '#111111';
+const COLOR_SUPP_DEFAULT = '#16a34a';   // green — supplement "moment" lines on the Body pie
+const COLOR_FIT_DEFAULT  = '#d946ef';   // magenta — fitness arcs (incl. the merged 'fitness' arc)
 const DOW_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KDOW_SHORT = ['일','월','화','수','목','금','토'];
 const KDOW_FULL  = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
@@ -745,13 +770,14 @@ function iconOf(type, key){
   const lib = type === 'supplement' ? SUPP_ICONS : FIT_ICONS;
   return (lib[key] || Object.values(lib)[0]).svg;
 }
-// Synthetic schedule-like object so a health record flows through the pie / timer / day engine
+// Synthetic schedule-like object so a health record flows through the pie / timer / day engine.
+// Supplements are a "moment" (no duration → dur 0, drawn as a line); fitness defaults to 15 min.
 function healthSchedule(r){
   return {
     id: r.id, name: r.itemName,
-    dur:  r.dur  || (r.type === 'fitness' ? 45 : 15),
+    dur:  r.type === 'fitness' ? (r.dur || 15) : 0,
     flex: HEALTH_FLEX,
-    color: r.color || (r.type === 'fitness' ? '#3b82f6' : '#16a34a'),
+    color: r.color || (r.type === 'fitness' ? COLOR_FIT_DEFAULT : COLOR_SUPP_DEFAULT),
     iconKey: r.iconKey, type: r.type, isHealth: true,
   };
 }
@@ -1166,46 +1192,18 @@ function spreadLabelsVertically(labels, C, R){
     if (!moved) break;
   }
 }
-function renderPie(entries){
-  const C = 180, R = 150;
-  let svg = `<svg viewBox="0 0 360 360">`;
-  svg += `<circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
-
-  // schedule wedges (+ collect name labels to place after the de-overlap pass)
-  const labelDefs = [];
-  for (const e of entries){
-    const op = e.status === 'done' ? 0.4 : e.status === 'missed' ? 0.3 : 0.55;
-    const m0 = Math.max(e.eff, DIAL_START), m1 = Math.min(e.eff + e.s.dur, DIAL_END);
-    const p = wedgePath(C, C, R, e.eff, e.eff + e.s.dur);
-    if (p){
-      // "Already Passed" items are drawn as an outline only — transparent fill,
-      // just a stroke in the item's own colour (neither success-red nor miss-black).
-      if (e.passed) svg += `<path d="${p}" fill="none" stroke="${e.s.color}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
-      else          svg += `<path d="${p}" fill="${e.dispColor}" opacity="${op}"/>`;
-    }
-    // name label inside the wedge — length budget grows with duration
-    if (m1 > m0){
-      const maxLen = e.s.dur <= 15 ? 2 : e.s.dur <= 30 ? 5 : e.s.dur <= 60 ? 8 : 12;
-      const label = e.s.name.slice(0, maxLen);
-      if (label){
-        const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
-        const tOp = e.passed ? 0.7 : (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
-        labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
-      }
-    }
-    // flex window arc band at rim
-    if (e.status === 'upcoming' || e.status === 'window'){
-      const f0 = Math.max(e.eff - e.s.flex, DIAL_START), f1 = Math.min(e.eff + e.s.flex, DIAL_END);
-      if (f1 > f0){
-        const [ax,ay] = polar(C,C,R+5,f0), [bx,by] = polar(C,C,R+5,f1);
-        const large = (f1-f0)/(DIAL_END-DIAL_START) > 0.5 ? 1 : 0;
-        svg += `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
-      }
-    }
-  }
-  // spread overlapping labels apart vertically, then draw each (with a faint
-  // leader line back to its wedge when it had to move, and a white halo so the
-  // text reads cleanly over the colored wedges underneath)
+// flex-window arc band at the rim (shown while an item can still be started)
+function flexBand(C, R, e){
+  if (e.status !== 'upcoming' && e.status !== 'window') return '';
+  const f0 = Math.max(e.eff - e.s.flex, DIAL_START), f1 = Math.min(e.eff + e.s.flex, DIAL_END);
+  if (f1 <= f0) return '';
+  const [ax,ay] = polar(C,C,R+5,f0), [bx,by] = polar(C,C,R+5,f1);
+  const large = (f1-f0)/(DIAL_END-DIAL_START) > 0.5 ? 1 : 0;
+  return `<path d="M ${ax} ${ay} A ${R+5} ${R+5} 0 ${large} 1 ${bx} ${by}" fill="none" stroke="${e.s.color}" stroke-width="4" stroke-linecap="round" opacity="0.9"/>`;
+}
+// shared dial furniture: de-overlap + draw the collected labels, then hour ticks,
+// the "now" hand (today only) and the centre dot; returns the closed <svg> string.
+function pieDecorate(svg, labelDefs, C, R){
   spreadLabelsVertically(labelDefs, C, R);
   for (const l of labelDefs){
     if (Math.abs(l.y - l.ay) > 5){
@@ -1213,8 +1211,6 @@ function renderPie(entries){
     }
     svg += `<text x="${l.x}" y="${l.y}" font-size="10" fill="#222" opacity="${l.tOp}" text-anchor="middle" dominant-baseline="middle" style="paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round">${l.text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`;
   }
-
-  // hour ticks + labels
   for (let h = 10; h < 22; h++){
     const m = h*60;
     const [x0,y0] = polar(C,C,R-6,m);
@@ -1224,8 +1220,6 @@ function renderPie(entries){
     const lab = h === 12 ? '12P' : (h > 12 ? (h-12) : h);
     svg += `<text x="${lx}" y="${ly}" font-size="12" fill="#999" text-anchor="middle" dominant-baseline="middle">${lab}</text>`;
   }
-
-  // now hand (today only, inside dial range)
   if (selectedDate === todayStr()){
     const nm = nowMin();
     if (nm >= DIAL_START && nm <= DIAL_END){
@@ -1233,9 +1227,101 @@ function renderPie(entries){
       svg += `<line x1="${C}" y1="${C}" x2="${hx}" y2="${hy}" stroke="#111" stroke-width="2"/>`;
     }
   }
-  svg += `<circle cx="${C}" cy="${C}" r="4" fill="#111"/>`;
-  svg += `</svg>`;
-  $('#pieWrap').innerHTML = svg;
+  return svg + `<circle cx="${C}" cy="${C}" r="4" fill="#111"/></svg>`;
+}
+
+// Day — Intelligence: schedules as colored wedges (current behaviour).
+function renderIntelPie(entries){
+  const C = 180, R = 150;
+  let svg = `<svg viewBox="0 0 360 360"><circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
+  const labelDefs = [];
+  for (const e of entries){
+    const op = e.status === 'done' ? 0.4 : e.status === 'missed' ? 0.3 : 0.55;
+    const m0 = Math.max(e.eff, DIAL_START), m1 = Math.min(e.eff + e.s.dur, DIAL_END);
+    const p = wedgePath(C, C, R, e.eff, e.eff + e.s.dur);
+    if (p){
+      if (e.passed) svg += `<path d="${p}" fill="none" stroke="${e.s.color}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
+      else          svg += `<path d="${p}" fill="${e.dispColor}" opacity="${op}"/>`;
+    }
+    if (m1 > m0){
+      const maxLen = e.s.dur <= 15 ? 2 : e.s.dur <= 30 ? 5 : e.s.dur <= 60 ? 8 : 12;
+      const label = e.s.name.slice(0, maxLen);
+      if (label){
+        const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
+        const tOp = e.passed ? 0.7 : (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
+        labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
+      }
+    }
+    svg += flexBand(C, R, e);
+  }
+  $('#pieWrapIntel').innerHTML = pieDecorate(svg, labelDefs, C, R);
+}
+
+// Day — Body: supplements as "moment" lines (no duration); fitness as arcs, with any
+// overlapping fitness items (≥1 min) merged into a single 'fitness' arc (magenta).
+function renderBodyPie(entries){
+  const C = 180, R = 150;
+  let svg = `<svg viewBox="0 0 360 360"><circle cx="${C}" cy="${C}" r="${R}" fill="#fff" stroke="#e5e5e5" stroke-width="1.5"/>`;
+  const labelDefs = [];
+
+  // --- fitness: merge overlapping [eff, eff+dur] intervals into clusters ---
+  const segs = entries.filter(e => e.s.type === 'fitness')
+    .map(e => ({ a: e.eff, b: e.eff + e.s.dur, e }))
+    .filter(seg => seg.b > seg.a)
+    .sort((x,y) => x.a - y.a);
+  const clusters = [];
+  for (const seg of segs){
+    const last = clusters[clusters.length - 1];
+    if (last && seg.a < last.b){             // strict overlap (≥1 min) → merge
+      last.b = Math.max(last.b, seg.b);
+      last.items.push(seg.e);
+    } else {
+      clusters.push({ a: seg.a, b: seg.b, items: [seg.e] });
+    }
+  }
+  for (const cl of clusters){
+    const merged = cl.items.length > 1;
+    const m0 = Math.max(cl.a, DIAL_START), m1 = Math.min(cl.b, DIAL_END);
+    const p = wedgePath(C, C, R, cl.a, cl.b);
+    const allPassed = cl.items.every(it => it.passed);
+    const color = merged ? COLOR_FIT_DEFAULT : cl.items[0].dispColor;
+    if (p){
+      if (allPassed) svg += `<path d="${p}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
+      else {
+        const op = cl.items.every(it => it.status === 'done') ? 0.4
+                 : cl.items.every(it => it.status === 'missed') ? 0.3 : 0.55;
+        svg += `<path d="${p}" fill="${color}" opacity="${op}"/>`;
+      }
+    }
+    if (m1 > m0){
+      const label = merged ? 'fitness' : cl.items[0].s.name.slice(0, (cl.b - cl.a) <= 15 ? 4 : 8);
+      if (label){
+        const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
+        const tOp = allPassed ? 0.7 : 0.85;
+        labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
+      }
+    }
+    if (!merged) svg += flexBand(C, R, cl.items[0]);   // single fitness keeps its take-window band
+  }
+
+  // --- supplements: a moment → a radial line at its time (green by default) ---
+  for (const e of entries.filter(x => x.s.type === 'supplement')){
+    const m = e.eff;
+    if (m < DIAL_START || m > DIAL_END) continue;
+    const [x,y] = polar(C, C, R, m);
+    const opv  = e.status === 'done' ? 0.55 : e.status === 'missed' ? 0.45 : 0.95;
+    const dash = e.passed ? ` stroke-dasharray="5 3"` : '';
+    svg += `<line x1="${C}" y1="${C}" x2="${x}" y2="${y}" stroke="${e.dispColor}" stroke-width="2.5" stroke-linecap="round" opacity="${opv}"${dash}/>`;
+    svg += flexBand(C, R, e);
+    const label = e.s.name.slice(0, 6);
+    if (label){
+      const [lx,ly] = polar(C, C, R * 0.82, m);
+      const tOp = (e.status === 'done' || e.status === 'missed') ? 0.5 : 0.9;
+      labelDefs.push({ ax: lx, ay: ly, x: lx, y: ly, text: label, tOp, halfW: textHalfWidth(label, 10) });
+    }
+  }
+
+  $('#pieWrapBody').innerHTML = pieDecorate(svg, labelDefs, C, R);
 }
 
 // ============================================================
@@ -1243,15 +1329,19 @@ function renderPie(entries){
 // ============================================================
 const BADGE_TEXT = { upcoming:'Upcoming', window:'Start now', running:'Running', done:'Done', missed:'Missed' };
 
-function renderDayList(entries){
+function setDayTitles(){
   const d = parseDate(selectedDate);
-  $('#dayTitle').textContent =
-    KDOW_FULL[d.getDay()] + ', ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일, ' + d.getFullYear() +
-    (selectedDate === todayStr() ? ' (오늘)' : '');
+  const t = KDOW_FULL[d.getDay()] + ', ' + (d.getMonth()+1) + '월 ' + d.getDate() + '일, ' + d.getFullYear() +
+            (selectedDate === todayStr() ? ' (오늘)' : '');
+  $('#dayTitleIntel').textContent = t;
+  $('#dayTitleBody').textContent  = t;
+}
 
-  const body = $('#schedBody');
-  $('#emptyNote').style.display = entries.length ? 'none' : 'block';
+function renderDayList(entries, bodySel, emptySel){
+  const body = $(bodySel);
+  $(emptySel).style.display = entries.length ? 'none' : 'block';
   body.innerHTML = entries.map(e => {
+    const isMoment = e.isHealth && e.s.type === 'supplement';   // supplements have no duration
     const shifted = Math.round(e.eff) !== e.base && !e.run;
     const timeCell =
       `<div class="time-main">${fmtMin(e.eff)}</div>` +
@@ -1273,7 +1363,7 @@ function renderDayList(entries){
     return `<tr class="${e.status}">
       <td>${timeCell}</td>
       <td class="name">${nameCell}</td>
-      <td>${e.s.dur}m</td>
+      <td>${isMoment ? '—' : e.s.dur + 'm'}</td>
       <td><span class="badge ${badgeCls}">${badgeTxt}</span></td>
       <td>${action}</td>
       <td>${lastCell}</td>
@@ -1358,8 +1448,13 @@ function renderTimer(){
 function renderAll(){
   renderWeeks();
   const entries = computeDay(selectedDate);
-  renderPie(entries);
-  renderDayList(entries);
+  const intel = entries.filter(e => !e.isHealth);   // Day — Intelligence (schedules)
+  const body  = entries.filter(e =>  e.isHealth);    // Day — Body (supplements + fitness)
+  setDayTitles();
+  renderIntelPie(intel);
+  renderBodyPie(body);
+  renderDayList(intel, '#schedBodyIntel', '#emptyNoteIntel');
+  renderDayList(body,  '#schedBodyBody',  '#emptyNoteBody');
   renderBanner();
   renderTimer();
   renderSupp();
@@ -1378,7 +1473,7 @@ setInterval(() => {
     const run = todayRuns[ent.s.id];
     if (run && !run.done && Date.now() - run.start >= ent.s.dur * 60000){
       run.done = true;
-      toast('Finished: ' + ent.s.name, 'ok');
+      if (ent.s.dur > 0) toast('Finished: ' + ent.s.name, 'ok');   // moments (dur 0) finish silently
       scheduleSave();
     }
   }
@@ -1389,8 +1484,13 @@ setInterval(() => {
     lastStatusSig = sig;
     renderWeeks();
     const entries = computeDay(selectedDate);
-    renderPie(entries);
-    renderDayList(entries);
+    const intel = entries.filter(x => !x.isHealth);
+    const body  = entries.filter(x =>  x.isHealth);
+    setDayTitles();
+    renderIntelPie(intel);
+    renderBodyPie(body);
+    renderDayList(intel, '#schedBodyIntel', '#emptyNoteIntel');
+    renderDayList(body,  '#schedBodyBody',  '#emptyNoteBody');
   }
   renderBanner();
 }, 1000);
@@ -1704,7 +1804,8 @@ async function deleteOrphans(token, calId){
 function buildHealthEvent(rec){
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startD = new Date(parseDate(rec.date)); startD.setMinutes(timeToMin(rec.time));
-  const dur = rec.dur || (rec.type === 'fitness' ? 45 : 15);
+  // supplements are a moment → a short 10-min marker block; fitness defaults to 15 min
+  const dur = rec.type === 'fitness' ? (rec.dur || 15) : 10;
   const endD = new Date(startD.getTime() + dur * 60000);
   const kind = rec.type === 'fitness' ? '피트니스' : '보조제';
   return {
@@ -1958,10 +2059,12 @@ function confirmHealthAdd(){
   if (!name){ toast('이름을 입력하세요','error'); return; }
   if (!hAddIcon){ toast('아이콘을 선택하세요','error'); return; }
   if (hAddType==='supplement'){
-    state.supplements.push({ id:uid(), name, iconKey:hAddIcon, color:PALETTE[state.supplements.length%PALETTE.length], dur:15 });
+    // supplements are a moment (no duration); default colour green
+    state.supplements.push({ id:uid(), name, iconKey:hAddIcon, color:COLOR_SUPP_DEFAULT, dur:0 });
   } else {
     const sets=Math.max(1,+$('#hAddSets').value||3), reps=Math.max(1,+$('#hAddReps').value||15);
-    state.fitness.push({ id:uid(), name, iconKey:hAddIcon, sets, reps, color:PALETTE[state.fitness.length%PALETTE.length], dur:45 });
+    // fitness defaults: magenta, 15-minute duration
+    state.fitness.push({ id:uid(), name, iconKey:hAddIcon, sets, reps, color:COLOR_FIT_DEFAULT, dur:15 });
   }
   $('#hAddModal').classList.remove('show');
   renderAll(); scheduleSave();
@@ -2112,23 +2215,33 @@ function saveHealthDay(){
 }
 
 // ----- Seed catalog once -----
-const HEALTH_SEED_VERSION = 1;
+const HEALTH_SEED_VERSION = 2;
 function seedHealthCatalog(){
-  SUPP_SEED.forEach((seed,i) => {
+  SUPP_SEED.forEach((seed) => {
     let s=state.supplements.find(x=>x.name===seed.name);
     if (!s){ s={id:uid()}; state.supplements.push(s); }
     Object.assign(s,{ name:seed.name, iconKey:s.iconKey||seed.iconKey, dose:seed.dose, perWeek:seed.perWeek, recTime:seed.recTime, recLabel:seed.recLabel, note:seed.note });
-    if (!s.color) s.color=PALETTE[i%PALETTE.length];
-    if (!s.dur) s.dur=15;
+    s.color=COLOR_SUPP_DEFAULT;   // supplements: green
+    s.dur=0;                      // moment — no duration
   });
-  FIT_SEED.forEach((seed,i) => {
+  FIT_SEED.forEach((seed) => {
     if (!state.fitness.some(f=>f.name===seed.name))
-      state.fitness.push({ id:uid(), ...seed, color:PALETTE[(i+3)%PALETTE.length], dur:45 });
+      state.fitness.push({ id:uid(), ...seed, color:COLOR_FIT_DEFAULT, dur:15 });
+  });
+}
+// v2: supplements → green moments (dur 0), fitness → magenta @ 15 min, across catalog + records
+function migrateHealthV2(){
+  state.supplements.forEach(s => { s.color=COLOR_SUPP_DEFAULT; s.dur=0; });
+  state.fitness.forEach(f => { f.color=COLOR_FIT_DEFAULT; if (!f.dur || f.dur===45) f.dur=15; });
+  state.healthRecords.forEach(r => {
+    if (r.type==='supplement'){ r.color=COLOR_SUPP_DEFAULT; r.dur=0; }
+    else { r.color=COLOR_FIT_DEFAULT; if (!r.dur || r.dur===45) r.dur=15; }
   });
 }
 function runHealthMigrations(){
   const v=state.healthSeedVersion||0;
   if (v<1) seedHealthCatalog();
+  if (v<2) migrateHealthV2();
   const pending = v<HEALTH_SEED_VERSION;
   state.healthSeedVersion=HEALTH_SEED_VERSION;
   return pending;
