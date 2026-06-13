@@ -44,6 +44,15 @@ was **started inside its Flex Window** turns **red** (both its tag in the list a
 wedge). A schedule that was **not started in time** (window missed, or started outside the
 window) turns **black**. Untouched/upcoming schedules keep their own chosen color.
 
+**Already Passed.** When adding a schedule (in the **+Schedule** editor) or a health item (a
+per-item **이미 지남** toggle in the **+Health** day editor), you can mark it **Already Passed** —
+a retro-log meaning "this happened, exactly on time." It is recorded as **started at its scheduled
+time and finished exactly its duration later**, so it neither cascades later tasks nor counts as a
+late/missed start. Such an item is neither success-red nor miss-black: its pie wedge is drawn with
+**no fill — only a stroke** outline in the item's own colour, its list swatch becomes a hollow ring,
+and it carries a **지남** badge. The Schedule toggle applies to the **currently selected day**
+(pick it in Weeks first).
+
 ## Health (보조제 & 피트니스)
 
 The HealthCare features are merged in. Two catalog panels live on the page:
@@ -63,7 +72,8 @@ The HealthCare features are merged in. Two catalog panels live on the page:
 (pick a day in Weeks first, otherwise it's today). Toggle any 보조제 / 피트니스 item on and set
 its time with the **+/- buttons** — supplements start at their recommended time but can be set
 to **any time of day** in 15-minute steps (no range limit); exercises default to 6 PM, also free.
-Save writes a **health record** for that date.
+Each item also has an **이미 지남** (Already Passed) checkbox to retro-log it as done on time
+(see *Already Passed* above). Save writes a **health record** for that date.
 
 **Everything flows through the same engine.** A health record assigned to a day appears as a
 colored **wedge on the Day pie**, in the **Day table** (with its icon and a ✕ to remove it from
@@ -104,7 +114,7 @@ data,"{""settings"":{""defaultFlex"":15},""schedules"":[{""id"":""s1"",""name"":
 
 - `settings` — default Flex Window plus Google sync settings: `gcalClientId`, `gcalCalendarId`, `autoSync`.
 - `schedules` — task definitions: name, set time, duration (min), Flex Window (± min), weekdays (0=Sun…6=Sat), `range` (`"6.12-7.8"` or empty), `excl` (`"7.19, 7.26"` or empty), color, and `gcalId` once synced to Google Calendar.
-- `dayStates` — per-date run records (actual start timestamps + done flags). Entries older than 30 days are pruned automatically on save.
+- `dayStates` — per-date run records (`{start, done, passed?}`: actual start timestamp + done flag, plus `passed:true` for items retro-logged via *Already Passed*). Entries older than 30 days are pruned automatically on save.
 - `supplements` / `fitness` — the 보조제 / 피트니스 catalogs (id, name, iconKey, color, default duration; supplements add dose/perWeek/recTime/recLabel/note/timeSpan, exercises add sets/reps). Seeded once on first run (`healthSeedVersion`).
 - `healthRecords` — health items assigned to specific dates: `{id, date, time, type, itemId, itemName, iconKey, color, dur, sets?, reps?, gcalId?}`. These drive the pie, timer and Weeks dots for that day and sync as single-date Google events.
 - Saving is automatic (debounced ~1 s after any change); **Save**/**Reload** buttons force it manually. Loads always cache-bust so every device sees fresh data.

@@ -197,6 +197,7 @@
   .badge.running { background: #dbeafe; color: var(--blue); }
   .badge.done    { background: #f5f5f5; color: var(--ink3); }
   .badge.missed  { background: #fee2e2; color: var(--red); }
+  .badge.passed  { background: #eef2ff; color: #6366f1; }
   .edit-link { font-size: 12px; color: var(--ink3); cursor: pointer; border: none; background: none; padding: 2px 4px; }
   .edit-link:hover { color: var(--blue); background: none; }
   .empty-note { color: var(--ink3); font-size: 13px; text-align: center; padding: 18px 0; }
@@ -350,6 +351,11 @@
   .step-btn:disabled { opacity: 0.4; cursor: default; background: #f4f4f4; border-color: var(--line); color: #999; }
   .time-val { min-width: 78px; text-align: center; font-size: 13px; font-weight: 700; color: var(--blue); }
   .time-hint { font-size: 11px; color: var(--ink3); }
+  .passed-chip {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+    color: #6366f1; cursor: pointer; user-select: none; font-family: "Noto Sans KR", sans-serif;
+  }
+  .passed-chip input { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: #6366f1; }
 
   /* ---------- Icon grid (add modal) ---------- */
   .icon-grid {
@@ -529,6 +535,10 @@
     <input type="text" id="f-excl" placeholder="7.19, 7.26">
     <label>Color</label>
     <div class="color-row" id="f-colors"></div>
+    <div class="switch-row">
+      <span class="lbl" id="f-passed-lbl">Already Passed — log as done, started at its scheduled time</span>
+      <label class="switch"><input type="checkbox" id="f-passed"><span class="knob"></span></label>
+    </div>
     <div class="modal-actions">
       <button class="danger" id="f-delete" style="margin-right:auto">Delete</button>
       <button id="f-cancel">Cancel</button>
@@ -698,6 +708,23 @@ function dayState(ds){
   if (!state.dayStates[ds]) state.dayStates[ds] = { runs:{} };
   if (!state.dayStates[ds].runs) state.dayStates[ds].runs = {};
   return state.dayStates[ds];
+}
+// epoch ms at a given clock time ('HH:MM') on a 'YYYY-MM-DD' date (local)
+function epochAt(ds, hhmm){
+  const d = parseDate(ds);          // local midnight of that date
+  d.setMinutes(timeToMin(hhmm));    // minutes-from-midnight (rolls over into hours)
+  return d.getTime();
+}
+// Mark / unmark a schedule or health item as "Already Passed" on `selectedDate`:
+// a run logged as started at its scheduled time and done exactly dur later.
+// Turning it off only clears a passed marker — a real (live) run is left intact.
+function setPassedRun(id, hhmm, on){
+  const ds = dayState(selectedDate);
+  if (on){
+    ds.runs[id] = { start: epochAt(selectedDate, hhmm), done: true, passed: true };
+  } else if (ds.runs[id] && ds.runs[id].passed){
+    delete ds.runs[id];
+  }
 }
 
 // ----- Health helpers -----
@@ -959,10 +986,14 @@ function computeDay(ds){
     const base = timeToMin(s.time);
     let eff = base + offset;
     const run = runs[s.id];
-    let startMin = null, status;
+    let startMin = null, status, passed = false;
 
     let startedInWindow = false;
-    if (run){
+    if (run && run.passed){
+      // "Already Passed": retro-logged as started at the scheduled time and ended
+      // exactly dur later — pinned to its own slot, no cascade into later schedules.
+      passed = true; eff = base; startMin = base; status = 'done';
+    } else if (run){
       const st = new Date(run.start);
       startMin = st.getHours()*60 + st.getMinutes() + st.getSeconds()/60;
       startedInWindow = Math.abs(startMin - eff) <= s.flex;  // vs pre-start effective time
@@ -981,10 +1012,12 @@ function computeDay(ds){
       status = 'missed';
     }
     // display color: red = started inside the Flex Window, black = not started in time
+    // (passed items are drawn as a stroke-only outline, so dispColor is unused for them)
     let dispColor = s.color;
-    if (run)                        dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
+    if (passed)                     dispColor = s.color;
+    else if (run)                   dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
     else if (status === 'missed')   dispColor = COLOR_MISSED;
-    out.push({ s, base, eff, run, startMin, status, dispColor, isHealth: false });
+    out.push({ s, base, eff, run, startMin, status, dispColor, isHealth: false, passed });
   }
 
   // ----- Health records assigned to this date (one-off, no cascade) -----
@@ -993,8 +1026,10 @@ function computeDay(ds){
     const base = timeToMin(r.time);
     let eff = base;
     const run = runs[r.id];
-    let startMin = null, status, startedInWindow = false;
-    if (run){
+    let startMin = null, status, startedInWindow = false, passed = false;
+    if (run && run.passed){
+      passed = true; eff = base; startMin = base; status = 'done';
+    } else if (run){
       const st = new Date(run.start);
       startMin = st.getHours()*60 + st.getMinutes() + st.getSeconds()/60;
       startedInWindow = Math.abs(startMin - eff) <= syn.flex;
@@ -1011,9 +1046,10 @@ function computeDay(ds){
       status = 'missed';
     }
     let dispColor = syn.color;
-    if (run)                      dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
+    if (passed)                   dispColor = syn.color;
+    else if (run)                 dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
     else if (status === 'missed') dispColor = COLOR_MISSED;
-    out.push({ s: syn, base, eff, run, startMin, status, dispColor, isHealth: true, rec: r });
+    out.push({ s: syn, base, eff, run, startMin, status, dispColor, isHealth: true, rec: r, passed });
   }
 
   out.sort((a,b) => a.eff - b.eff);
@@ -1141,14 +1177,19 @@ function renderPie(entries){
     const op = e.status === 'done' ? 0.4 : e.status === 'missed' ? 0.3 : 0.55;
     const m0 = Math.max(e.eff, DIAL_START), m1 = Math.min(e.eff + e.s.dur, DIAL_END);
     const p = wedgePath(C, C, R, e.eff, e.eff + e.s.dur);
-    if (p) svg += `<path d="${p}" fill="${e.dispColor}" opacity="${op}"/>`;
+    if (p){
+      // "Already Passed" items are drawn as an outline only — transparent fill,
+      // just a stroke in the item's own colour (neither success-red nor miss-black).
+      if (e.passed) svg += `<path d="${p}" fill="none" stroke="${e.s.color}" stroke-width="1.5" stroke-linejoin="round" opacity="0.9"/>`;
+      else          svg += `<path d="${p}" fill="${e.dispColor}" opacity="${op}"/>`;
+    }
     // name label inside the wedge — length budget grows with duration
     if (m1 > m0){
       const maxLen = e.s.dur <= 15 ? 2 : e.s.dur <= 30 ? 5 : e.s.dur <= 60 ? 8 : 12;
       const label = e.s.name.slice(0, maxLen);
       if (label){
         const [tx,ty] = polar(C, C, R * 0.62, (m0 + m1) / 2);
-        const tOp = (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
+        const tOp = e.passed ? 0.7 : (e.status === 'done' || e.status === 'missed') ? 0.45 : 0.9;
         labelDefs.push({ ax: tx, ay: ty, x: tx, y: ty, text: label, tOp, halfW: textHalfWidth(label, 10) });
       }
     }
@@ -1220,17 +1261,20 @@ function renderDayList(entries){
     const action = canStart
       ? `<button class="start" data-start="${e.s.id}">Start</button>`
       : (e.status === 'running' ? `<button data-finish="${e.s.id}" style="font-size:12px;padding:4px 10px">Finish</button>` : '');
+    const swatchStyle = e.passed ? `background:transparent;box-shadow:inset 0 0 0 2px ${e.s.color}` : `background:${e.dispColor}`;
     const nameCell = e.isHealth
       ? `<span class="d-icon">${iconOf(e.s.type, e.s.iconKey)}</span>${esc(e.s.name)}`
-      : `<span class="swatch" style="background:${e.dispColor}"></span>${e.s.name}`;
+      : `<span class="swatch" style="${swatchStyle}"></span>${e.s.name}`;
     const lastCell = e.isHealth
       ? `<button class="edit-link" data-remove-health="${e.s.id}" title="이 날짜에서 제거">✕</button>`
       : `<button class="edit-link" data-edit="${e.s.id}">Edit</button>`;
+    const badgeCls = e.passed ? 'passed' : e.status;
+    const badgeTxt = e.passed ? '지남' : BADGE_TEXT[e.status];
     return `<tr class="${e.status}">
       <td>${timeCell}</td>
       <td class="name">${nameCell}</td>
       <td>${e.s.dur}m</td>
-      <td><span class="badge ${e.status}">${BADGE_TEXT[e.status]}</span></td>
+      <td><span class="badge ${badgeCls}">${badgeTxt}</span></td>
       <td>${action}</td>
       <td>${lastCell}</td>
     </tr>`;
@@ -1386,6 +1430,13 @@ function openEditor(id){
   buildDayChecks(s ? s.days : [0,1,2,3,4,5,6]);
   buildColors(s ? s.color : PALETTE[state.schedules.length % PALETTE.length]);
   $('#f-delete').style.display = s ? '' : 'none';
+  // "Already Passed" applies to the currently selected day; reflect any existing marker
+  const selRun = (s && state.dayStates[selectedDate] && state.dayStates[selectedDate].runs)
+    ? state.dayStates[selectedDate].runs[s.id] : null;
+  $('#f-passed').checked = !!(selRun && selRun.passed);
+  const sd = parseDate(selectedDate);
+  $('#f-passed-lbl').textContent =
+    `Already Passed — log as done on ${(sd.getMonth()+1)}/${sd.getDate()}, started at its scheduled time`;
   $('#editModal').classList.add('show');
 }
 function closeEditor(){ $('#editModal').classList.remove('show'); }
@@ -1431,6 +1482,12 @@ $('#f-ok').onclick = () => {
   };
   const i = state.schedules.findIndex(s => s.id === obj.id);
   if (i >= 0) state.schedules[i] = obj; else state.schedules.push(obj);
+  // "Already Passed" → log a done-at-scheduled-time run on the selected day
+  const wantPassed = $('#f-passed').checked;
+  if (wantPassed && !occursOn(obj, parseDate(selectedDate))){
+    toast('Heads up: this schedule doesn’t fall on the selected day', 'error');
+  }
+  setPassedRun(obj.id, obj.time, wantPassed);
   closeEditor(); scheduleSave(); renderAll();
 };
 
@@ -1965,6 +2022,8 @@ function openHealthDay(){
 
 function makeHealthDayItem(item, type, existRec){
   const on = !!existRec;
+  const existRun = existRec ? ((state.dayStates[selectedDate]||{}).runs||{})[existRec.id] : null;
+  const passedOn = !!(existRun && existRun.passed);
   const el=document.createElement('div');
   el.className='day-item';
   el.dataset.itemId=item.id; el.dataset.type=type; el.dataset.recId=existRec?existRec.id:'';
@@ -1992,6 +2051,7 @@ function makeHealthDayItem(item, type, existRec){
           <span class="time-val">${fmt12(defTime)}</span>
           <button type="button" class="step-btn" data-dir="1">+</button>
         </div>${hint}
+        <label class="passed-chip" title="이미 지난 일정으로 기록 (예정 시간에 시작·종료한 것으로 처리)"><input type="checkbox" class="passed-input" ${passedOn?'checked':''}>이미 지남</label>
       </div>
     </div>
     <div class="check-circle ${on?'on':''}">${on?'✓':''}</div>`;
@@ -2020,8 +2080,11 @@ function saveHealthDay(){
       const isOn=el.querySelector('.check-circle').classList.contains('on');
       const stepper=el.querySelector('.time-stepper');
       let time=(stepper&&stepper.dataset.time)||recTime||'09:00';   // no clamp — any time allowed
+      const passedChk=el.querySelector('.passed-input');
+      const passed=!!(passedChk && passedChk.checked);
       if (isOn){
         const item=itemsArr.find(x=>x.id===itemId); if (!item) return;
+        let id=recId;
         if (recId){
           const rec=state.healthRecords.find(r=>r.id===recId);
           if (rec){ rec.time=time; rec.itemName=item.name; rec.iconKey=item.iconKey; rec.color=item.color; }
@@ -2030,11 +2093,15 @@ function saveHealthDay(){
                       iconKey:item.iconKey, color:item.color||(type==='fitness'?'#3b82f6':'#16a34a'), dur:item.dur||(type==='fitness'?45:15) };
           if (type==='fitness'){ rec.sets=item.sets; rec.reps=item.reps; }
           state.healthRecords.push(rec);
+          id=rec.id;
         }
+        setPassedRun(id, time, passed);   // "이미 지남" → log as done at the scheduled time
       } else if (recId){
         const gone=state.healthRecords.find(r=>r.id===recId);
         if (gone && gone.gcalId) (state.gcalTrash=state.gcalTrash||[]).push(gone.gcalId);
         state.healthRecords=state.healthRecords.filter(r=>r.id!==recId);
+        const dsObj=state.dayStates[selectedDate];
+        if (dsObj && dsObj.runs) delete dsObj.runs[recId];   // drop any run for the removed record
       }
     });
   }
