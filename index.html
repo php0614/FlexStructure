@@ -1643,8 +1643,9 @@ setInterval(() => {
     }
   }
   renderTimer();
-  // re-render the rest only when a status changes (cheap signature)
-  const sig = computeDay(todayStr()).map(x => x.status).join() + selectedDate;
+  // re-render the rest when a status changes OR the minute rolls over
+  // (the "now" hand lives in the pie, so it must redraw every minute)
+  const sig = computeDay(todayStr()).map(x => x.status).join() + selectedDate + Math.floor(nowMin());
   if (sig !== lastStatusSig){
     lastStatusSig = sig;
     renderWeeks();
