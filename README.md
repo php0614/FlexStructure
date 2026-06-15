@@ -19,6 +19,12 @@ shown on a Time-Timer-style dial.
   shifts by the same delta** (+10 min) — and each still keeps its own Flex Window around the
   shifted time. Starting early shifts later tasks earlier, too.
 - The original time is shown struck-through in the list whenever a shift is in effect.
+- **원래시간 복원 (Restore original time).** When an earlier task started **late** and pushed the
+  later ones back, each pushed task in the **Day — Intelligence** list shows a small amber
+  **원래시간 복원** button under its time. Pressing it returns **only that one schedule** to its
+  original set time (dropping the inherited delay); the other shifted tasks keep their pushed
+  times until you restore them individually. The button appears only while a task is actually
+  pushed later and hasn't been started yet, and is per-day (restoring affects the selected day only).
 
 ## UI
 
@@ -66,6 +72,11 @@ The HealthCare features are merged in. Two catalog panels live on the page:
   open the **복용 정보** popup — recommended frequency & time, a recommended ± window (a +/- stepper,
   1–6 h, persisted per item, now purely a guideline), the note, and a **delete button** (item
   removal lives here — there is no longer a separate remove button on the panel).
+  - **미리 복용 (Take early).** A supplement scheduled later today shows a **yellow 미리 복용**
+    button in the **Day — Body** list while it is still *Upcoming* (before its time). Pressing it
+    marks it **복용함 (taken)** immediately and records the completion time as the **actual moment you
+    pressed it** (pulled forward to now), so its green line on the Body dial moves to that time.
+    Once its window opens the button becomes the normal green **복용**.
 - **🏋️ 피트니스 관리** — a catalog of exercises with sets × reps, **magenta** by default and a
   **30-minute** default duration. The info popup shows a 2D **front/back muscle diagram**
   highlighting the primary (red) and secondary (pink) target muscles, plus muscle tags, a
