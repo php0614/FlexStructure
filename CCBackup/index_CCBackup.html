@@ -78,6 +78,12 @@
     padding: 4px 12px; font-size: 12px; border-radius: 6px;
   }
   button.start:hover { background: #15803d; }
+  /* 보충제 "미리 복용" — 노란 버튼 (정해진 시간 전에 미리 복용) */
+  button.take-early {
+    background: #facc15; border-color: #eab308; color: #422006;
+    padding: 4px 12px; font-size: 12px; border-radius: 6px; font-weight: 600;
+  }
+  button.take-early:hover { background: #eab308; border-color: #ca8a04; }
 
   /* ---------- Start banner ---------- */
   #banner {
@@ -206,6 +212,14 @@
   .time-main { font-weight: 600; white-space: nowrap; }
   .time-orig { font-size: 11px; color: var(--ink3); text-decoration: line-through; white-space: nowrap; }
   .flex-note { font-size: 11px; color: var(--ink3); white-space: nowrap; }
+  /* "원래시간 복원" — 이전 일정 지연으로 뒤로 밀린 일정을 원래 시작 시간으로 되돌리는 버튼 */
+  .restore-btn {
+    display: inline-block; margin-top: 4px; line-height: 1.3;
+    font-size: 9.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    padding: 2px 7px; border-radius: 6px;
+    border: 1px solid #fcd34d; background: transparent; color: #b45309;
+  }
+  .restore-btn:hover { background: transparent; border-color: #f59e0b; color: #92400e; }
   .badge {
     display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap;
   }
@@ -1100,6 +1114,7 @@ function repeatCfgForEdit(rec){
 function computeDay(ds){
   const dObj = parseDate(ds);
   const runs = (state.dayStates[ds] && state.dayStates[ds].runs) || {};
+  const pins = (state.dayStates[ds] && state.dayStates[ds].pins) || {};   // 원래시간 복원된 일정들
   const list = state.schedules
     .filter(s => occursOn(s, dObj))
     .slice()
@@ -1114,6 +1129,9 @@ function computeDay(ds){
     const base = timeToMin(s.time);
     let eff = base + offset;
     const run = runs[s.id];
+    // 원래시간 복원: 이전 일정 지연으로 이월된 offset을 이 일정에만 무시(원래 시간으로). 뒤의 일정은 그대로 둔다.
+    const pinned = !run && !!pins[s.id];
+    if (pinned) eff = base;
     let startMin = null, status, passed = false;
 
     let startedInWindow = false;
@@ -1145,7 +1163,9 @@ function computeDay(ds){
     if (passed)                     dispColor = s.color;
     else if (run)                   dispColor = startedInWindow ? COLOR_ONTIME : COLOR_MISSED;
     else if (status === 'missed')   dispColor = COLOR_MISSED;
-    out.push({ s, base, eff, run, startMin, status, dispColor, isHealth: false, passed });
+    // 뒤로 밀린(eff > base) 미실행·미복원 일정에만 "원래시간 복원" 버튼을 띄운다.
+    const canRestore = !run && !pinned && Math.round(eff) > base;
+    out.push({ s, base, eff, run, startMin, status, dispColor, isHealth: false, passed, canRestore });
   }
 
   // ----- Health records on this date (single-date or repeating; no cascade) -----
@@ -1163,6 +1183,7 @@ function computeDay(ds){
       startMin = st.getHours()*60 + st.getMinutes() + st.getSeconds()/60;
       if (isSupp){
         startedInWindow = true;   // a confirmed ("taken") supplement counts as done; keep its line at the scheduled time
+        if (run.early) eff = startMin;   // 미리 복용 → 완료 시각을 실제 복용한 시각으로 당겨서 표시
       } else {
         startedInWindow = Math.abs(startMin - eff) <= syn.flex;
         eff = startMin;
@@ -1218,10 +1239,20 @@ function finishSchedule(id){
   renderAll();
 }
 // Supplements are a moment — no timer. Confirming ("Yes, taken") marks it done.
-function takeSupplement(id){
+// early=true → "미리 복용": 정해진 시간 전에 미리 복용. 완료 시각은 실제 누른 시각(now)으로 기록.
+function takeSupplement(id, early){
   const ds = dayState(todayStr());
-  ds.runs[id] = { start: Date.now(), done: true };
-  toast('복용 완료: ' + nameForId(id), 'ok');
+  ds.runs[id] = { start: Date.now(), done: true, early: !!early };
+  toast((early ? '미리 복용 완료: ' : '복용 완료: ') + nameForId(id), 'ok');
+  scheduleSave();
+  renderAll();
+}
+// 원래시간 복원 — 이전 일정이 늦게 시작돼 뒤로 밀린 이 일정만 원래(설정) 시작 시간으로 되돌린다.
+function restoreSchedule(id){
+  const ds = dayState(selectedDate);
+  ds.pins = ds.pins || {};
+  ds.pins[id] = true;
+  toast('원래 시간으로 복원: ' + nameForId(id), 'ok');
   scheduleSave();
   renderAll();
 }
@@ -1489,16 +1520,20 @@ function renderDayList(entries, bodySel, emptySel){
   $(emptySel).style.display = entries.length ? 'none' : 'block';
   body.innerHTML = entries.map(e => {
     const isMoment = e.isHealth && e.s.type === 'supplement';   // supplements have no duration
+    const isToday = selectedDate === todayStr();
     const shifted = Math.round(e.eff) !== e.base && !e.run;
     const timeCell =
       `<div class="time-main">${fmtMin(e.eff)}</div>` +
       (shifted ? `<div class="time-orig">${fmtMin(e.base)}</div>` : '') +
-      (e.run ? '' : isMoment ? `<div class="flex-note">3h 내</div>` : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`);
-    const canAct = selectedDate === todayStr() && !e.run && (e.status === 'window' || e.status === 'missed');
-    const action = canAct
+      (e.run ? '' : isMoment ? `<div class="flex-note">3h 내</div>` : `<div class="flex-note">&plusmn;${e.s.flex}m</div>`) +
+      (e.canRestore ? `<button class="restore-btn ko" data-restore="${e.s.id}" title="이전 일정 지연으로 밀린 시간을 원래 시작 시간으로 되돌립니다">원래시간 복원</button>` : '');
+    const canAct = isToday && !e.run && (e.status === 'window' || e.status === 'missed');
+    const canEarly = isToday && !e.run && isMoment && e.status === 'upcoming';   // 보충제 미리 복용
+    let action = canAct
       ? (isMoment ? `<button class="start" data-take="${e.s.id}">복용</button>`
                   : `<button class="start" data-start="${e.s.id}">Start</button>`)
       : (e.status === 'running' ? `<button data-finish="${e.s.id}" style="font-size:12px;padding:4px 10px">Finish</button>` : '');
+    if (canEarly) action = `<button class="take-early" data-take-early="${e.s.id}">미리 복용</button>`;
     const swatchStyle = e.passed ? `background:transparent;box-shadow:inset 0 0 0 2px ${e.s.color}` : `background:${e.dispColor}`;
     const nameCell = e.isHealth
       ? `<span class="d-icon">${iconOf(e.s.type, e.s.iconKey)}</span>${esc(e.s.name)}`
@@ -1520,6 +1555,8 @@ function renderDayList(entries, bodySel, emptySel){
 
   body.querySelectorAll('[data-start]').forEach(b => b.onclick = () => startSchedule(b.dataset.start));
   body.querySelectorAll('[data-take]').forEach(b => b.onclick = () => takeSupplement(b.dataset.take));
+  body.querySelectorAll('[data-take-early]').forEach(b => b.onclick = () => takeSupplement(b.dataset.takeEarly, true));
+  body.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => restoreSchedule(b.dataset.restore));
   body.querySelectorAll('[data-finish]').forEach(b => b.onclick = () => finishSchedule(b.dataset.finish));
   body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
   body.querySelectorAll('[data-edit-rep]').forEach(b => b.onclick = () => editRecordRepeat(b.dataset.editRep));
