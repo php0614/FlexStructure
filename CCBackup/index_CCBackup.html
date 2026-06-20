@@ -11,7 +11,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #fafafa;
+    --bg: #f4f5f7;
     --panel: #ffffff;
     --ink: #111;
     --ink2: #555;
@@ -64,16 +64,30 @@
   button:hover { background: #f5f5f5; }
   button:disabled { opacity: 0.5; cursor: default; }
   button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
-  #btnAdd, #btnAddHealth { padding: 6px 12px; font-size: 13px; font-weight: 600; line-height: 1.3; border-radius: 7px; }
-  /* header buttons that carry an icon + a text label (label hides on phones) */
-  .hdr-btn { display: inline-flex; align-items: center; gap: 6px; }
-  .hdr-btn svg { flex: none; }
-  #btnSync { display: inline-flex; align-items: center; justify-content: center; padding: 6px 9px; color: var(--blue); }
-  #btnSync:hover { background: #eff6ff; border-color: var(--blue); }
+  /* ---------- Header icon buttons — iOS-style icon-only rounded squares ---------- */
+  .icon-btn {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 34px; padding: 0;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--ink2);
+    cursor: pointer;
+  }
+  .icon-btn:hover { background: #f5f5f5; }
+  .icon-btn svg { width: 21px; height: 21px; }
+  .icon-btn.tint-blue  { color: var(--blue); }
+  .icon-btn.tint-green { color: var(--green); }
+  /* small "+" badge, bottom-right — matches the iOS +Schedule / +Health icons */
+  .icon-btn .plus-badge {
+    position: absolute; right: 2px; bottom: 1px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: currentColor; border: 1.5px solid var(--panel);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon-btn .plus-badge svg { width: 9px; height: 9px; display: block; }
   #btnSync.syncing { opacity: 0.6; cursor: default; }
   #btnSync.syncing svg { animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #btnAddHealth:hover { background: #15803d !important; }
   button.primary:hover { background: #2563eb; }
   button.danger { color: var(--red); border-color: #fecaca; }
   button.start {
@@ -142,12 +156,10 @@
     header { gap: 7px; padding: 9px 11px; }
     header h1 { font-size: 16px; }
     #statusBar { flex-basis: 100%; order: 9; }   /* status drops to its own line, stays readable */
-    .hdr-btn .btn-label { display: none; }        /* show only the icon on phones */
-    .hdr-btn { gap: 0; padding: 8px; justify-content: center; }
-    #btnAdd, #btnAddHealth { padding: 8px; }      /* override the wider desktop padding */
-    #btnSettings { padding: 7px 9px; }
+    .icon-btn { width: 34px; height: 32px; }      /* slightly smaller icons on phones */
+    .icon-btn svg { width: 19px; height: 19px; }
     main { gap: 12px; padding: 12px; }
-    section.panel { padding: 13px; border-radius: 12px; }
+    section.panel { padding: 13px; border-radius: 14px; }
   }
 
   /* the two Day panels (Intelligence / Body): side by side when wide enough, else stacked */
@@ -161,7 +173,7 @@
   section.panel {
     background: var(--panel);
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 16px;
   }
   section.panel h2 {
@@ -512,41 +524,25 @@
   <h1>Flex Structure</h1>
   <span id="statusBar"></span>
   <span class="spacer"></span>
-  <button id="btnAdd" class="primary hdr-btn" title="Add a recurring schedule" aria-label="Add a recurring schedule">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2"/>
-      <path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/>
-    </svg>
-    <span class="btn-label">+Schedule</span>
+  <button id="btnAdd" class="icon-btn tint-blue" title="Add a recurring schedule" aria-label="Add a recurring schedule">
+    <svg viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M184 0c30.9 0 56 25.1 56 56V456c0 30.9-25.1 56-56 56c-28.9 0-52.7-21.9-55.7-50.1c-5.2 1.4-10.7 2.1-16.3 2.1c-35.3 0-64-28.7-64-64c0-7.4 1.3-14.6 3.6-21.2C21.4 367.4 0 338.2 0 304c0-31.9 18.7-59.5 45.8-72.3C37.1 220.8 32 207 32 192c0-30.7 21.6-56.3 50.4-62.6C80.8 123.9 80 118 80 112c0-29.9 20.6-55.1 48.3-62.1C131.3 21.9 155.1 0 184 0zM328 0c28.9 0 52.6 21.9 55.7 49.9C411.4 56.9 432 82.1 432 112c0 6-.8 11.9-2.4 17.4C458.4 135.7 480 161.3 480 192c0 15-5.1 28.8-13.8 39.7C493.3 244.5 512 272.1 512 304c0 34.2-21.4 63.4-51.6 74.8c2.3 6.6 3.6 13.8 3.6 21.2c0 35.3-28.7 64-64 64c-5.6 0-11.1-.7-16.3-2.1c-3 28.2-26.8 50.1-55.7 50.1c-30.9 0-56-25.1-56-56V56c0-30.9 25.1-56 56-56z"/></svg>
+    <span class="plus-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg></span>
   </button>
-  <button id="btnAddHealth" class="primary hdr-btn" title="Add a 보조제 / 피트니스 item to the selected day" aria-label="Add a health item" style="background:var(--green);border-color:var(--green)">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.49 4.04 3 5.5l7 7Z"/>
-      <path d="M12 8v6M9 11h6"/>
-    </svg>
-    <span class="btn-label">+Health</span>
+  <button id="btnAddHealth" class="icon-btn tint-green" title="Add a 보조제 / 피트니스 item to the selected day" aria-label="Add a health item">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+    <span class="plus-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg></span>
   </button>
-  <button id="btnSync" title="Sync current schedule to Google Calendar" aria-label="Sync to Google Calendar">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
-    </svg>
+  <button id="btnSync" class="icon-btn tint-blue" title="Sync current schedule to Google Calendar" aria-label="Sync to Google Calendar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
   </button>
-  <button id="btnSettings" title="Settings" aria-label="Settings">&#9881;</button>
-  <button id="btnSave" class="hdr-btn" title="Save now" aria-label="Save now">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/>
-      <path d="M17 21v-8H7v8M7 3v5h8"/>
-    </svg>
-    <span class="btn-label">Save</span>
+  <button id="btnSettings" class="icon-btn" title="Settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
-  <button id="btnReload" class="hdr-btn" title="Reload from cloud" aria-label="Reload from cloud">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
-      <path d="M21 3v5h-5"/>
-      <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-      <path d="M3 21v-5h5"/>
-    </svg>
-    <span class="btn-label">Reload</span>
+  <button id="btnSave" class="icon-btn tint-blue" title="Save now" aria-label="Save now">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5A4.5 4.5 0 0 1 6 7.5a6 6 0 0 1 11.6 1.5A4 4 0 0 1 17.5 17"/><path d="M12 12v7M9 15l3-3 3 3"/></svg>
+  </button>
+  <button id="btnReload" class="icon-btn" title="Reload from cloud" aria-label="Reload from cloud">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
   </button>
 </header>
 
